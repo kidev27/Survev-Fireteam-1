@@ -78,9 +78,8 @@ import {
     isZombiePowerUpType,
     ZombieNukeCash,
     ZombieNukeHealthFraction,
-    zombiePowerUpBudget,
-    ZombiePowerUpMaxActive,
-    ZombiePowerUpMinInterval,
+    ZombiePowerUpDrops,
+    ZombiePowerUpTypes,
     type ZombiePowerUpTimers,
     type ZombiePowerUpType,
     ZombieTimedPowerUpDuration,
@@ -141,6 +140,7 @@ import {
     ZombieMysteryBoxRollDuration,
     ZombieMysteryBoxWeapons,
     ZombieUpgradeCost,
+    zombieWaveCount,
 } from "./zombieMode.ts";
 
 export type SpecOpsKind = "enemy" | "ally" | "sentry";
@@ -5777,10 +5777,18 @@ export class SpecOpsManager implements PracticeHost {
         instaKill: 0,
         doublePoints: 0,
     };
-    zombieDropsRemaining = 0;
-    private zombieDropCooldown = 0;
-    private zombieKillsUntilDrop = 3;
-    private lastZombiePowerUp?: ZombiePowerUpType;
+    /** Power-up drops this round (cap: ZombiePowerUpDrops.roundCap). */
+    zombieRoundDrops = 0;
+    /** Shared zombie kill cash counted toward the next point drop. */
+    zombiePointAccumulator = 0;
+    /** Cash needed for the next point drop; grows after each one. */
+    zombiePointTarget = ZombiePowerUpDrops.pointStart;
+    /** Shuffled power-ups still to draw; refilled with all of them when empty. */
+    zombiePowerUpHat: ZombiePowerUpType[] = [];
+    /** Drops earned on a zombie that died where players can't reach. */
+    private zombiePendingDrops = 0;
+    /** Team-size scale for this round, fixed when the round starts. */
+    private zombieRoundDropScale = 1;
     private lastZombiePowerUpHud = "";
 
     /** Practice mode controller; undefined in normal Spec Ops. */
@@ -5830,7 +5838,6 @@ export class SpecOpsManager implements PracticeHost {
     }
 
     private tickZombiePowerUps(dt: number): void {
-        this.zombieDropCooldown = math.max(0, this.zombieDropCooldown - dt);
         this.zombiePowerUps.instaKill = math.max(0, this.zombiePowerUps.instaKill - dt);
         this.zombiePowerUps.doublePoints = math.max(0, this.zombiePowerUps.doublePoints - dt);
         this.syncZombiePowerUpHud();
@@ -5932,33 +5939,6 @@ export class SpecOpsManager implements PracticeHost {
         return true;
     }
 
-    private zombieTeamAmmoRatio(): number {
-        let current = 0;
-        let capacity = 0;
-        for (const player of this.livingHumans()) {
-            for (const item of Object.keys(player.invManager.items) as InventoryItem[]) {
-                if (GameObjectDefs.typeToDef(item).type !== "ammo") continue;
-                current += player.invManager.get(item);
-                capacity += player.invManager.getMaxCapacity(item);
-            }
-        }
-        return capacity > 0 ? current / capacity : 1;
-    }
-
-    private pickZombiePowerUp(): ZombiePowerUpType {
-        const lowAmmo = this.zombieTeamAmmoRatio() < 0.35;
-        const weights: Array<{ type: ZombiePowerUpType; weight: number }> = [
-            { type: "zombie_powerup_insta_kill", weight: 1 },
-            { type: "zombie_powerup_double_points", weight: 1 },
-            { type: "zombie_powerup_max_ammo", weight: lowAmmo ? 1.8 : 0.85 },
-            { type: "zombie_powerup_nuke", weight: 0.8 },
-        ];
-        for (const option of weights) {
-            if (option.type === this.lastZombiePowerUp) option.weight *= 0.15;
-        }
-        return util.weightedRandom(weights).type;
-    }
-
     spawnZombiePowerUp(type: ZombiePowerUpType, pos: Vec2, layer: number): Loot | undefined {
         return this.game.lootBarn.addLoot(type, pos, layer, 1, {
             pushSpeed: 1.5,
@@ -5967,26 +5947,78 @@ export class SpecOpsManager implements PracticeHost {
         });
     }
 
-    private tryDropZombiePowerUp(victim: Player): void {
-        if (
-            !this.zombieMode
-            || this.phase !== "combat"
-            || this.zombieDropsRemaining <= 0
-            || !lastCallPosReachable(this.game, victim.pos)
-        ) return;
-        this.zombieKillsUntilDrop--;
-        if (this.zombieKillsUntilDrop > 0 || this.zombieDropCooldown > 0) return;
-        const active = this.game.lootBarn.loots.filter(
-            (loot) => !loot.destroyed && isZombiePowerUpType(loot.type),
-        ).length;
-        if (active >= ZombiePowerUpMaxActive) return;
+    /**
+     * Team-size balance: a bigger team fights more zombies per round, so it
+     * needs proportionally more points (and luckier kills) per drop.
+     */
+    zombieDropTeamScale(): number {
+        const humans = math.max(1, this.livingHumans().length);
+        const wave = math.max(1, this.wave);
+        return zombieWaveCount(wave, humans, this.difficulty)
+            / zombieWaveCount(wave, 1, this.difficulty);
+    }
 
-        const type = this.pickZombiePowerUp();
-        if (!this.spawnZombiePowerUp(type, v2.copy(victim.pos), victim.layer)) return;
-        this.lastZombiePowerUp = type;
-        this.zombieDropsRemaining--;
-        this.zombieDropCooldown = ZombiePowerUpMinInterval;
-        this.zombieKillsUntilDrop = util.randomInt(3, 6);
+    /** Next power-up from the hat; an empty hat is refilled with all of them and shuffled. */
+    drawZombiePowerUp(): ZombiePowerUpType {
+        if (!this.zombiePowerUpHat.length) {
+            this.zombiePowerUpHat = [...ZombiePowerUpTypes];
+            util.shuffleArray(this.zombiePowerUpHat);
+        }
+        return this.zombiePowerUpHat.shift()!;
+    }
+
+    /**
+     * Zombie kill: add its cash to the shared point counter (each full target
+     * earns a drop) and roll the per-kill chance. Drops land on this zombie.
+     */
+    onZombieKilledForDrops(victim: Player, cash: number, rand = Math.random()): void {
+        
+        //Check if it is zombie mode, if it is specops type, stop and return here
+        if (!this.zombieMode || victim.specOpsKind !== "enemy") return;
+        
+        const scale = this.zombieRoundDropScale;
+        let earned = 0;
+
+        if (cash > 0) {
+            this.zombiePointAccumulator += cash;
+            while (this.zombiePointAccumulator >= this.zombiePointTarget * scale) {
+                this.zombiePointAccumulator -= this.zombiePointTarget * scale;
+                this.zombiePointTarget *= ZombiePowerUpDrops.pointGrowth;
+                earned++;
+            }
+        }
+        
+        if (rand < ZombiePowerUpDrops.killChance / scale) earned++;
+        
+        //todo: add wave balancing for later rounds 
+        // -> round 35: 0.02 -> 0.015
+        // -> round 50+: -> 0.015 -> 0.01
+        
+        const owed = earned + this.zombiePendingDrops;
+        if (!owed) return;
+
+        if (!lastCallPosReachable(this.game, victim.pos)) {
+            // Somewhere players can't reach: hand it to the next zombie that dies in play.
+            this.zombiePendingDrops = owed;
+            return;
+        }
+
+        this.zombiePendingDrops = 0;
+        for (let i = 0; i < owed; i++) {
+            if (!this.spawnZombieDropFromHat(victim.pos, victim.layer)) break;
+        }
+    }
+
+    /** The gates: per-round cap, then the next power-up from the hat. */
+    private spawnZombieDropFromHat(pos: Vec2, layer: number): boolean {
+        if (this.zombieRoundDrops >= ZombiePowerUpDrops.roundCap) return false;
+        this.zombieRoundDrops++;
+        return !!this.spawnZombiePowerUp(this.drawZombiePowerUp(), v2.copy(pos), layer);
+    }
+
+    /** Boss / event drops: spawn exactly this power-up, ignoring the cap and the hat. */
+    spawnZombieEventDrop(type: ZombiePowerUpType, pos: Vec2, layer: number): Loot | undefined {
+        return this.spawnZombiePowerUp(type, v2.copy(pos), layer);
     }
 
     private setMysteryBoxVisual(box: Obstacle, open: boolean, canUse: boolean): void {
@@ -6372,11 +6404,11 @@ export class SpecOpsManager implements PracticeHost {
     }
 
     /** Operator is farming the wave: remaining AI heat up and start pushing. */
-    onEnemyKilled(killer: Player, victim: Player): void {
+    onEnemyKilled(killer: Player, victim: Player, cash = 0): void {
         if (victim.specOpsKind !== "enemy") return;
 
         this.contracts.onEnemyKilled(killer, victim);
-        this.tryDropZombiePowerUp(victim);
+        this.onZombieKilledForDrops(victim, cash);
 
         const brain = this.brains.get(victim);
         if (brain?.loadout.castIronWipe || brain?.enemyClass === "cast_iron") {
@@ -7190,9 +7222,10 @@ export class SpecOpsManager implements PracticeHost {
         this.wave++;
         this.phase = "combat";
         if (this.zombieMode) {
-            this.zombieDropsRemaining = zombiePowerUpBudget(this.wave);
-            this.zombieDropCooldown = 0;
-            this.zombieKillsUntilDrop = util.randomInt(3, 5);
+            // Points and the hat carry over between rounds; the cap does not.
+            this.zombieRoundDrops = 0;
+            this.zombiePendingDrops = 0;
+            this.zombieRoundDropScale = this.zombieDropTeamScale();
         }
         this.phaseTimer = 0;
         this.spawnedThisWave = false;

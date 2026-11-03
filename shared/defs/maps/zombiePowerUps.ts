@@ -10,8 +10,6 @@ export type ZombiePowerUpType = (typeof ZombiePowerUpTypes)[number];
 export const ZombieTimedPowerUpDuration = 30;
 export const ZombiePowerUpLifetime = 30;
 export const ZombiePowerUpWarningTime = 5;
-export const ZombiePowerUpMinInterval = 12;
-export const ZombiePowerUpMaxActive = 2;
 export const ZombieNukeHealthFraction = 0.35;
 export const ZombieNukeCash = 400;
 
@@ -34,8 +32,26 @@ export function isZombiePowerUpType(type: string): type is ZombiePowerUpType {
     return ZombiePowerUpTypes.includes(type as ZombiePowerUpType);
 }
 
-export function zombiePowerUpBudget(wave: number): number {
-    return Math.min(5, 2 + Math.floor(Math.max(0, wave - 1) / 5));
+/**
+ * Drop rules (Black Ops style):
+ * - Points: zombie kill cash fills a shared counter. Each time it reaches the
+ *   target, a drop is earned and the target grows by `pointGrowth`.
+ * - Luck: every zombie kill also has a `killChance` roll.
+ * - At most `roundCap` drops per round; the type comes from a shuffled "hat"
+ *   holding every power-up once, refilled when empty.
+ * Bigger teams fight more zombies, so the target is multiplied and the kill
+ * chance divided by `zombieDropTeamScale` to keep drops per round the same.
+ */
+export const ZombiePowerUpDrops = {
+    pointStart: 2000,
+    pointGrowth: 1.14,
+    killChance: 0.02,
+    roundCap: 4,
+};
+
+/** Point target after `drops` point-earned drops. */
+export function zombiePowerUpPointTarget(drops: number): number {
+    return ZombiePowerUpDrops.pointStart * ZombiePowerUpDrops.pointGrowth ** drops;
 }
 
 /**
