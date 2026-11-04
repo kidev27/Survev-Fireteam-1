@@ -43,8 +43,9 @@ export function isZombiePowerUpType(type: string): type is ZombiePowerUpType {
  * chance divided by `zombieDropTeamScale` to keep drops per round the same.
  */
 export const ZombiePowerUpDrops = {
-    pointStart: 2000,
-    pointGrowth: 1.14,
+    // Tuned for hit + kill cash: about 1.5 drops per round from round 8 on.
+    pointStart: 1500,
+    pointGrowth: 1.08,
     killChance: 0.02,
     roundCap: 4,
 };

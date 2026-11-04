@@ -2989,10 +2989,14 @@ export class UiManager {
                     message = this.localization.translate("game-specops-next-wave");
                     message += ` ${Math.max(Math.floor(timeLeft), 0)} ${this.localization.translate("game-seconds")}`;
                     // Zombies: only the opening countdown can be skipped.
-                    if (waveStarted && this.game.m_map.getMapDef().gameMode.zombieMode) break;
-                    message += this.specOpsOnBreak
-                    ? ` — ${this.localization.translate("game-specops-break-vote")}`
-                    : ` — ${this.localization.translate("game-specops-start-early")}`;
+                    const zombies = !!this.game.m_map.getMapDef().gameMode.zombieMode;
+                    if (waveStarted && zombies) break;
+                    const hint = zombies
+                        ? "game-zombie-start-early"
+                        : this.specOpsOnBreak
+                        ? "game-specops-break-vote"
+                        : "game-specops-start-early";
+                    message += ` — ${this.localization.translate(hint)}`;
                     break;
                 }
                 message = this.localization.translate("game-red-zone-advances");

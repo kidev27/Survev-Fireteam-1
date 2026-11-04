@@ -130,6 +130,7 @@ import {
     zombieBuyGateCost,
     type ZombieClass,
     zombieEnemyHealth,
+    ZombieEconomy,
     ZombieKillBounty,
     ZombieLoadouts,
     ZombieMysteryBoxClaimDuration,
@@ -5979,8 +5980,9 @@ export class SpecOpsManager implements PracticeHost {
         const scale = this.zombieRoundDropScale;
         let earned = 0;
 
-        if (cash > 0) {
-            this.zombiePointAccumulator += cash;
+        if (cash > 0) this.zombiePointAccumulator += cash;
+        // Hit cash also fills the counter, so check on every kill.
+        {
             while (this.zombiePointAccumulator >= this.zombiePointTarget * scale) {
                 this.zombiePointAccumulator -= this.zombiePointTarget * scale;
                 this.zombiePointTarget *= ZombiePowerUpDrops.pointGrowth;
@@ -6007,6 +6009,22 @@ export class SpecOpsManager implements PracticeHost {
         for (let i = 0; i < owed; i++) {
             if (!this.spawnZombieDropFromHat(victim.pos, victim.layer)) break;
         }
+    }
+
+    /** Zombies: a player's non-lethal hit on a zombie pays hit cash (capped per zombie). */
+    onZombieHit(victim: Player, attacker: Player): void {
+        if (
+            !this.zombieMode
+            || victim.specOpsKind !== "enemy"
+            || attacker.specOpsAi
+            || attacker.teamId === victim.teamId
+            || victim.zombieHitCashPaid >= ZombieEconomy.maxHitCashPerZombie
+        ) return;
+        victim.zombieHitCashPaid += ZombieEconomy.hitCash;
+        const cash = this.modifyZombieKillCash(ZombieEconomy.hitCash);
+        this.grantCash(attacker, cash);
+        // Counts toward the next point drop; the drop lands on the next zombie killed.
+        this.zombiePointAccumulator += cash;
     }
 
     /** The gates: per-round cap, then the next power-up from the hat. */
@@ -6835,7 +6853,14 @@ export class SpecOpsManager implements PracticeHost {
             player.setDirty();
         }
 
-        this.grantCash(player, specOpsStartingCash(this.difficulty), true, false);
+        this.grantCash(
+            player,
+            this.zombieMode
+                ? Math.round(ZombieEconomy.startingCash * specOpsDifficultyMods(this.difficulty).cash)
+                : specOpsStartingCash(this.difficulty),
+            true,
+            false,
+        );
 
         // MW3-style vitals: high HP + armor pool (gear DR is disabled in Spec Ops).
         player.health = SpecOpsStartingHealth;
@@ -7104,7 +7129,8 @@ export class SpecOpsManager implements PracticeHost {
             return true;
         }
 
-        const bonus = specOpsEarlyStartBonus(this.phaseTimer);
+        // Zombies: starting early is just a choice, not a payday.
+        const bonus = this.zombieMode ? 0 : specOpsEarlyStartBonus(this.phaseTimer);
         const humans = this.livingHumans();
         if (bonus > 0) {
             for (let i = 0; i < humans.length; i++) {
@@ -7478,10 +7504,13 @@ export class SpecOpsManager implements PracticeHost {
         if (this.wave > 0 && this.wave % TreeRegrowEveryWaves === 0) {
             this.regrowDestroyedTrees();
         }
-        const bonus = specOpsWaveBonus(this.wave, this.difficulty);
-        const humans = this.livingHumans();
-        for (let i = 0; i < humans.length; i++) {
-            this.grantCash(humans[i], bonus);
+        // Zombies has no end-of-round bonus; cash comes from hits and kills.
+        if (!this.zombieMode) {
+            const bonus = specOpsWaveBonus(this.wave, this.difficulty);
+            const humans = this.livingHumans();
+            for (let i = 0; i < humans.length; i++) {
+                this.grantCash(humans[i], bonus);
+            }
         }
 
         // Zombie Survival always gives players a short, predictable breather.
@@ -9401,6 +9430,7 @@ export class SpecOpsManager implements PracticeHost {
         classId?: EnemyClass,
     ): void {
         player.specOpsKind = kind;
+        player.zombieHitCashPaid = 0;
         player.specOpsBounty = isZombieClass(classId)
             ? ZombieKillBounty
             : classId
