@@ -3174,7 +3174,7 @@ export class Player extends BaseGameObject {
                     }
                     bounty = this.game.specOps.modifyZombieKillCash(bounty);
                     this.game.specOps.grantCash(killCreditSource, bounty);
-                    this.game.specOps.onEnemyKilled(killCreditSource, this);
+                    this.game.specOps.onEnemyKilled(killCreditSource, this, bounty);
                 }
 
                 if (killCreditSource.isKillLeader) {

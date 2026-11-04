@@ -19,11 +19,12 @@ import { ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/ma
 import {
     isZombiePowerUpType,
     ZombieNukeCash,
-    zombiePowerUpBudget,
+    ZombiePowerUpDrops,
     zombiePowerUpFlashVisible,
     zombiePowerUpHudFlashPeriod,
     ZombiePowerUpLifetime,
     ZombieTimedPowerUpDuration,
+    ZombiePowerUpTypes,
 } from "../../shared/defs/maps/zombiePowerUps.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../shared/defs/register.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
@@ -43,9 +44,6 @@ test("Zombie Survival uses a dedicated, scaling zombie wave profile", () => {
             (weapon) => GameObjectDefs.typeToDefSafe(weapon)?.type === "gun",
         ),
     ).toBe(true);
-    expect(zombiePowerUpBudget(1)).toBe(2);
-    expect(zombiePowerUpBudget(11)).toBe(4);
-    expect(zombiePowerUpBudget(100)).toBe(5);
     expect(zombiePowerUpHudFlashPeriod(1)).toBeLessThan(zombiePowerUpHudFlashPeriod(5));
 
     const flashes = (start: number, end: number) => {
@@ -198,27 +196,103 @@ test("AI zombies pass through power-ups without collecting or removing them", ()
     expect(game.specOps!.isZombiePowerUpActive("instaKill")).toBe(false);
 });
 
-test("Zombie kills create at most one early-wave drop during the minimum interval", () => {
+function powerUpDrops(game: ReturnType<typeof createGame>) {
+    return game.lootBarn.loots.filter((loot) => !loot.destroyed && isZombiePowerUpType(loot.type));
+}
+
+function startZombieRound(players = 1) {
     const game = createGame(TeamMode.Solo, "specops_complex");
-    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    for (let i = 0; i < players; i++) game.playerBarn.addTestPlayer({ name: `Operator ${i}` });
     game.update(0.1);
     game.specOps!.startNextWave();
     game.specOps!.drainWaveSpawnQueuePublic();
+    return game;
+}
 
-    for (const zombie of [...game.specOps!.livingEnemies()]) {
-        zombie.damage({
+test("Power-up hat hands out every power-up once before repeating", () => {
+    const game = startZombieRound();
+    const first = Array.from({ length: 4 }, () => game.specOps!.drawZombiePowerUp());
+    const second = Array.from({ length: 4 }, () => game.specOps!.drawZombiePowerUp());
+    expect([...first].sort()).toEqual([...ZombiePowerUpTypes].sort());
+    expect([...second].sort()).toEqual([...ZombiePowerUpTypes].sort());
+});
+
+test("Zombie kill cash earns a drop at the point target, which then grows 14%", () => {
+    const game = startZombieRound();
+    const ops = game.specOps!;
+    const zombie = ops.livingEnemies()[0];
+
+    ops.onZombieKilledForDrops(zombie, 1999, 1);
+    expect(powerUpDrops(game)).toHaveLength(0);
+
+    ops.onZombieKilledForDrops(zombie, 101, 1);
+    const drops = powerUpDrops(game);
+    expect(drops).toHaveLength(1);
+    expect(v2.distance(drops[0].pos, zombie.pos)).toBeLessThan(3);
+    expect(ops.zombiePointAccumulator).toBeCloseTo(100);
+    expect(ops.zombiePointTarget).toBeCloseTo(ZombiePowerUpDrops.pointStart * 1.14);
+});
+
+test("Each zombie kill has a 2% drop chance", () => {
+    const game = startZombieRound();
+    const ops = game.specOps!;
+    const zombie = ops.livingEnemies()[0];
+    ops.onZombieKilledForDrops(zombie, 0, 0.03);
+    expect(powerUpDrops(game)).toHaveLength(0);
+    ops.onZombieKilledForDrops(zombie, 0, 0.01);
+    expect(powerUpDrops(game)).toHaveLength(1);
+});
+
+test("At most four power-ups drop per round; the cap resets next round", () => {
+    const game = startZombieRound();
+    const ops = game.specOps!;
+    const zombie = ops.livingEnemies()[0];
+    for (let i = 0; i < 10; i++) ops.onZombieKilledForDrops(zombie, 0, 0);
+    expect(ops.zombieRoundDrops).toBe(ZombiePowerUpDrops.roundCap);
+    expect(powerUpDrops(game)).toHaveLength(4);
+
+    const operator = game.playerBarn.livingPlayers.find((p) => !p.specOpsAi)!;
+    for (const enemy of [...ops.livingEnemies()]) {
+        enemy.damage({
             amount: 9999,
             damageType: GameConfig.DamageType.Player,
             dir: v2.create(1, 0),
             source: operator,
         });
     }
+    game.step(1);
+    expect(ops.phase).not.toBe("combat");
+    ops.startNextWave();
+    expect(ops.wave).toBe(2);
+    expect(ops.zombieRoundDrops).toBe(0);
+});
 
-    const drops = game.lootBarn.loots.filter(
-        (loot) => !loot.destroyed && isZombiePowerUpType(loot.type),
-    );
-    expect(drops).toHaveLength(1);
-    expect(game.specOps!.zombieDropsRemaining).toBe(1);
+test("Bigger teams need more points and luckier kills per drop", () => {
+    const game = startZombieRound(3);
+    const ops = game.specOps!;
+    const scale = ops.zombieDropTeamScale();
+    expect(scale).toBeGreaterThan(1.5);
+    const zombie = ops.livingEnemies()[0];
+
+    ops.onZombieKilledForDrops(zombie, ZombiePowerUpDrops.pointStart, 1);
+    ops.onZombieKilledForDrops(zombie, 0, ZombiePowerUpDrops.killChance * 0.9);
+    expect(powerUpDrops(game)).toHaveLength(0);
+
+    ops.onZombieKilledForDrops(zombie, ZombiePowerUpDrops.pointStart * scale, 1);
+    expect(powerUpDrops(game)).toHaveLength(1);
+});
+
+test("Real zombie kills feed their cash into the drop counter", () => {
+    const game = startZombieRound();
+    const operator = game.playerBarn.livingPlayers.find((p) => !p.specOpsAi)!;
+    const zombie = game.specOps!.livingEnemies()[0];
+    zombie.damage({
+        amount: 9999,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(1, 0),
+        source: operator,
+    });
+    expect(game.specOps!.zombiePointAccumulator).toBeGreaterThan(0);
 });
 
 test("Fireteam maps run classic Spec Ops and Zombies maps run zombie rules", () => {
