@@ -2975,7 +2975,7 @@ export class UiManager {
         }
     }
 
-    displayGasAnnouncement(type: GasMode, timeLeft: number, specOpsMode = false) {
+    displayGasAnnouncement(type: GasMode, timeLeft: number, specOpsMode = false, waveStarted = false) {
         // Practice has no waves, so no "next wave" / "press E" banners.
         if (this.game.m_map.getMapDef().gameMode.practiceMode) return;
         let message = "";
@@ -2988,6 +2988,8 @@ export class UiManager {
                     }
                     message = this.localization.translate("game-specops-next-wave");
                     message += ` ${Math.max(Math.floor(timeLeft), 0)} ${this.localization.translate("game-seconds")}`;
+                    // Zombies: only the opening countdown can be skipped.
+                    if (waveStarted && this.game.m_map.getMapDef().gameMode.zombieMode) break;
                     message += this.specOpsOnBreak
                     ? ` — ${this.localization.translate("game-specops-break-vote")}`
                     : ` — ${this.localization.translate("game-specops-start-early")}`;

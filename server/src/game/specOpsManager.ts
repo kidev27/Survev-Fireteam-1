@@ -7091,6 +7091,8 @@ export class SpecOpsManager implements PracticeHost {
             return false;
         }
         if (this.phase !== "prep" && this.phase !== "intermission") return false;
+        // Zombies: only the opening countdown can be skipped.
+        if (this.zombieMode && this.phase === "intermission") return false;
         if (this.shopSkipLock > 0) return false;
 
         // Long break: E is a skip vote; the wave starts once a majority is ready.

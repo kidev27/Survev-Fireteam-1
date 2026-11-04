@@ -646,3 +646,24 @@ test("Mystery Box fills an empty gun slot when the player takes it while holding
     expect(buyer.weapons[GameConfig.WeaponSlot.Secondary].type).toBe(prize.type);
     expect(buyer.curWeapIdx).toBe(GameConfig.WeaponSlot.Secondary);
 });
+
+test("Zombies: E starts round 1 early, but not later rounds", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    game.step(3);
+    expect(ops.phase).toBe("prep");
+    expect(ops.tryStartWaveEarly(operator)).toBe(true);
+    expect(ops.phase).toBe("combat");
+
+    ops.drainWaveSpawnQueuePublic();
+    for (const enemy of [...ops.livingEnemies()]) {
+        enemy.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0), source: operator });
+    }
+    game.step(1);
+    expect(ops.phase).toBe("intermission");
+    game.step(ZombieWaveIntermissionTime - 2);
+    expect(ops.tryStartWaveEarly(operator)).toBe(false);
+    expect(ops.phase).toBe("intermission");
+});
