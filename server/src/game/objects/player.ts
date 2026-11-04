@@ -61,6 +61,7 @@ import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject
 import type { Loot } from "./loot.ts";
 import type { MapIndicator } from "./mapIndicator.ts";
 import type { Obstacle } from "./obstacle.ts";
+import { ZombieEconomy } from "../zombieMode.ts";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -1483,6 +1484,8 @@ export class Player extends BaseGameObject {
     specOpsCombatTimer = 0;
     specOpsKind: "" | "enemy" | "ally" | "sentry" = "";
     specOpsBounty = 0;
+    /** Zombies: hit cash already paid out for damaging this zombie. */
+    zombieHitCashPaid = 0;
     specOpsCash = 0;
     specOpsCashDirty = true;
     /** Packed Spec Ops contract HUD (see packSpecOpsContractHud). */
@@ -2925,6 +2928,11 @@ export class Player extends BaseGameObject {
 
         this.health -= finalDamage;
 
+        // Zombies: points per hit. The killing blow pays kill cash instead.
+        if (this._health > 0 && finalDamage > 0 && playerSource && this.game.specOps) {
+            this.game.specOps.onZombieHit(this, playerSource);
+        }
+
         if (this.game.isTeamMode) {
             this.setGroupStatuses();
         }
@@ -3171,6 +3179,10 @@ export class Player extends BaseGameObject {
                     );
                     if (killCreditSource.hasPerk("turkey_shoot")) {
                         bounty = Math.round(bounty * PerkProperties.turkey_shoot.bountyMult);
+                    }
+                    const killWeapon = GameObjectDefs.typeToDefSafe(params.gameSourceType || "");
+                    if (this.game.specOps.zombieMode && killWeapon?.type == "melee") {
+                        bounty += ZombieEconomy.meleeKillBonus;
                     }
                     bounty = this.game.specOps.modifyZombieKillCash(bounty);
                     this.game.specOps.grantCash(killCreditSource, bounty);

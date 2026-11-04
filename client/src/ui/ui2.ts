@@ -900,6 +900,8 @@ export class UiManager2 {
             && !activePlayer.m_netData.m_downed
             && !activePlayer.m_netData.m_dead
             && gas.mode == GameConfig.GasMode.Waiting
+            // Zombies: Start wave only before round 1; later rounds run on their own timer.
+            && !(gas.waveStarted && map.getMapDef().gameMode.zombieMode)
         ) {
             interactionType = InteractionType.StartWave;
             interactionObject = null;

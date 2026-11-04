@@ -49,7 +49,22 @@ export const ZombieLoadouts: Record<ZombieClass, ZombieLoadout> = {
     },
 };
 
-export const ZombieKillBounty = 100;
+/**
+ * Zombies economy (Black Ops style). Difficulty still scales starting cash.
+ * - Every non-lethal hit pays `hitCash`, up to `maxHitCashPerZombie` per zombie.
+ * - The killing blow pays `killCash`, plus `meleeKillBonus` for melee kills.
+ * - No end-of-round bonus and no early-start cash.
+ * Double Points doubles hit and kill cash.
+ */
+export const ZombieEconomy = {
+    startingCash: 500,
+    hitCash: 10,
+    maxHitCashPerZombie: 100,
+    killCash: 60,
+    meleeKillBonus: 50,
+};
+
+export const ZombieKillBounty = ZombieEconomy.killCash;
 
 export const ZombieMysteryBoxCost = 1000;
 export const ZombieMysteryBoxRollDuration = 2.4;

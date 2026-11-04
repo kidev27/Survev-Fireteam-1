@@ -10,6 +10,7 @@ import {
     ZombieMysteryBoxRelocateUses,
     ZombieMysteryBoxRollDuration,
     ZombieMysteryBoxWeapons,
+    ZombieEconomy,
     ZombieUpgradeCost,
     zombieWaveCount,
 } from "../../server/src/game/zombieMode.ts";
@@ -125,7 +126,7 @@ test("Double Points affects zombie kills and Nuke team cash only", () => {
         dir: v2.create(1, 0),
         source: first,
     });
-    expect(first.specOpsCash - firstCash).toBe(200);
+    expect(first.specOpsCash - firstCash).toBe(ZombieEconomy.killCash * 2);
 
     const beforeNuke = [first.specOpsCash, second.specOpsCash];
     game.specOps!.activateZombiePowerUp("zombie_powerup_nuke");
@@ -217,12 +218,13 @@ test("Power-up hat hands out every power-up once before repeating", () => {
     expect([...second].sort()).toEqual([...ZombiePowerUpTypes].sort());
 });
 
-test("Zombie kill cash earns a drop at the point target, which then grows 14%", () => {
+test("Zombie cash earns a drop at the point target, which then grows", () => {
     const game = startZombieRound();
     const ops = game.specOps!;
     const zombie = ops.livingEnemies()[0];
+    const start = ZombiePowerUpDrops.pointStart;
 
-    ops.onZombieKilledForDrops(zombie, 1999, 1);
+    ops.onZombieKilledForDrops(zombie, start - 1, 1);
     expect(powerUpDrops(game)).toHaveLength(0);
 
     ops.onZombieKilledForDrops(zombie, 101, 1);
@@ -230,7 +232,7 @@ test("Zombie kill cash earns a drop at the point target, which then grows 14%", 
     expect(drops).toHaveLength(1);
     expect(v2.distance(drops[0].pos, zombie.pos)).toBeLessThan(3);
     expect(ops.zombiePointAccumulator).toBeCloseTo(100);
-    expect(ops.zombiePointTarget).toBeCloseTo(ZombiePowerUpDrops.pointStart * 1.14);
+    expect(ops.zombiePointTarget).toBeCloseTo(start * ZombiePowerUpDrops.pointGrowth);
 });
 
 test("Each zombie kill has a 2% drop chance", () => {
@@ -554,7 +556,7 @@ test("Zombie wave one spawns unarmed melee walkers with cash bounties", () => {
     expect(
         zombies.every((zombie) => zombie.weapons[GameConfig.WeaponSlot.Melee].type === "fists"),
     ).toBe(true);
-    expect(zombies.every((zombie) => zombie.specOpsBounty === 100)).toBe(true);
+    expect(zombies.every((zombie) => zombie.specOpsBounty === ZombieEconomy.killCash)).toBe(true);
     expect(zombies.every((zombie) => zombie.health === 42)).toBe(true);
     expect(zombies.every((zombie) => zombie.indoors)).toBe(true);
 
@@ -645,4 +647,60 @@ test("Mystery Box fills an empty gun slot when the player takes it while holding
     expect(prize.destroyed).toBe(true);
     expect(buyer.weapons[GameConfig.WeaponSlot.Secondary].type).toBe(prize.type);
     expect(buyer.curWeapIdx).toBe(GameConfig.WeaponSlot.Secondary);
+});
+
+test("Zombies: E starts round 1 early, but not later rounds", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    game.step(3);
+    expect(ops.phase).toBe("prep");
+    expect(ops.tryStartWaveEarly(operator)).toBe(true);
+    expect(ops.phase).toBe("combat");
+
+    ops.drainWaveSpawnQueuePublic();
+    for (const enemy of [...ops.livingEnemies()]) {
+        enemy.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0), source: operator });
+    }
+    game.step(1);
+    expect(ops.phase).toBe("intermission");
+    game.step(ZombieWaveIntermissionTime - 2);
+    expect(ops.tryStartWaveEarly(operator)).toBe(false);
+    expect(ops.phase).toBe("intermission");
+});
+
+test("Zombies economy: 500 to start, 10 per hit (capped), 60 per kill, +50 for melee, no round bonus", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    expect(operator.specOpsCash).toBe(ZombieEconomy.startingCash);
+    ops.startNextWave();
+    ops.drainWaveSpawnQueuePublic();
+    const [a, b] = ops.livingEnemies();
+
+    const hit = (z: typeof a, amount: number, gameSourceType?: string) =>
+        z.damage({ amount, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0), source: operator, gameSourceType });
+
+    let cash = operator.specOpsCash;
+    hit(a, 1);
+    expect(operator.specOpsCash - cash).toBe(ZombieEconomy.hitCash);
+    a.health = 9999;
+    for (let i = 0; i < 30; i++) hit(a, 1);
+    expect(a.zombieHitCashPaid).toBe(ZombieEconomy.maxHitCashPerZombie);
+
+    cash = operator.specOpsCash;
+    hit(a, 99999);
+    expect(operator.specOpsCash - cash).toBe(ZombieEconomy.killCash);
+
+    cash = operator.specOpsCash;
+    hit(b, 99999, "fists");
+    expect(operator.specOpsCash - cash).toBe(ZombieEconomy.killCash + ZombieEconomy.meleeKillBonus);
+
+    for (const z of [...ops.livingEnemies()]) hit(z, 99999);
+    cash = operator.specOpsCash;
+    game.step(1);
+    expect(ops.phase).toBe("intermission");
+    expect(operator.specOpsCash).toBe(cash);
 });

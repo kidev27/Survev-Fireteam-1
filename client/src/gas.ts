@@ -159,6 +159,8 @@ export class GasSafeZoneRenderer {
 
 export class Gas {
     mode: number = gasMode.Inactive;
+    /** True once a wave has been fought this match (the countdown left Waiting). */
+    waveStarted = false;
     circleT = 0;
     circleTOld = 0;
     duration = 0;
@@ -219,12 +221,17 @@ export class Gas {
     setFullState(circleT: number, data: GasData, ui: UiManager) {
         // Update Ui
         if (data.mode != this.mode) {
+            // Countdown -> fighting (Inactive) means a wave started.
+            if (this.mode == gasMode.Waiting && data.mode == gasMode.Inactive) {
+                this.waveStarted = true;
+            }
             const timeLeft = Math.ceil(data.duration * (1 - circleT));
             ui.setWaitingForPlayers(false);
             ui.displayGasAnnouncement(
                 data.mode,
                 timeLeft,
                 ui.game.m_map.specOpsMode,
+                this.waveStarted,
             );
         }
 
