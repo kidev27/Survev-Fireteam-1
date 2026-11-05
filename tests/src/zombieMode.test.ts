@@ -18,6 +18,13 @@ import {
 import type { GunDef } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { SpecOpsShopCatalog } from "../../shared/defs/maps/specOpsShop.ts";
+import {
+    packAPunchType,
+    packAPunchUpgradeFor,
+    ZombiePackAPunchNames,
+    ZombiePackAPunchStats,
+    ZombiePackAPunchType,
+} from "../../shared/defs/maps/zombiePackAPunch.ts";
 import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
 import { ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/maps/zombiePerks.ts";
 import {
@@ -33,6 +40,7 @@ import {
 import { GameObjectDefs, MapObjectDefs } from "../../shared/defs/register.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
 import { collider } from "../../shared/utils/collider.ts";
+import { util } from "../../shared/utils/util.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
@@ -84,6 +92,29 @@ test("Max Ammo refills every living operator without changing loaded magazines",
         expect(player.invManager.get("9mm")).toBe(player.invManager.getMaxCapacity("9mm"));
         expect(player.invManager.get("frag")).toBe(player.invManager.getMaxCapacity("frag"));
     }
+});
+
+test("Zombies: players start without throwables; Max Ammo refills only frags and MIRVs", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+
+    const throwables = Object.keys(player.invManager.items).filter(
+        (item) => GameObjectDefs.typeToDefSafe(item)?.type === "throwable",
+    ) as Array<keyof typeof player.invManager.items>;
+    expect(throwables.length).toBeGreaterThan(2);
+    for (const item of throwables) expect(player.invManager.get(item)).toBe(0);
+
+    game.specOps!.activateZombiePowerUp("zombie_powerup_max_ammo");
+    for (const item of throwables) {
+        const expected = item === "frag" || item === "mirv" ? player.invManager.getMaxCapacity(item) : 0;
+        expect(player.invManager.get(item), item).toBe(expected);
+    }
+
+    // Throwables a player already owns (e.g. bought strobes) are left alone, not topped up.
+    player.invManager.set("strobe", 1);
+    game.specOps!.activateZombiePowerUp("zombie_powerup_max_ammo");
+    expect(player.invManager.get("strobe")).toBe(1);
 });
 
 test("Insta-Kill one-shots walkers, doubles elite damage, and expires for the team", () => {
@@ -342,7 +373,7 @@ test("Last Call generates its furnished motel, club, courtyard and garage routes
     expect(props.has("lastcall_bar_club")).toBe(true);
     expect(props.has("lastcall_pool")).toBe(true);
     expect(props.has("zombie_power_switch")).toBe(true);
-    expect(props.has("zombie_upgrade_bench")).toBe(true);
+    expect(props.has("zombie_pack_a_punch")).toBe(true);
     expect(props.has("zombie_garage_car")).toBe(true);
     expect(props.has("zombie_mystery_box")).toBe(true);
     expect(game.map.obstacles.filter((obstacle) => obstacle.type.startsWith("specops_station_")))
@@ -477,43 +508,164 @@ test("Last Call spawns zombies at fixed entries in currently reachable zones", (
     ).toBe(true);
 });
 
-test("Last Call power opens the garage and enables weapon upgrades", () => {
+test("Last Call power opens the garage and enables Pack-a-Punch", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
     const powerSwitch = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_power_switch")!;
     const powerGate = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_power_gate")!;
-    const bench = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_upgrade_bench")!;
+    const machine = game.map.obstacles.find((obstacle) => obstacle.type === ZombiePackAPunchType)!;
 
     expect(game.specOps!.zombiePowerOn).toBe(false);
-    expect(bench.button?.canUse).toBe(false);
+    expect(machine.button?.canUse).toBe(false);
     v2.set(operator.pos, powerSwitch.pos);
     game.grid.updateObject(operator);
     powerSwitch.interact(operator);
 
     expect(game.specOps!.zombiePowerOn).toBe(true);
     expect(powerGate.destroyed).toBe(true);
-    expect(bench.button?.canUse).toBe(true);
+    expect(machine.button?.canUse).toBe(true);
+});
 
-    const gun = operator.weapons[GameConfig.WeaponSlot.Primary];
-    const beforeClip = operator.weaponManager.getAmmoStats(
-        GameObjectDefs.typeToDef(gun.type, "gun"),
-        gun.type,
-    ).maxClip;
-    game.specOps!.grantCash(operator, ZombieUpgradeCost);
-    const paidCash = operator.specOpsCash;
-    v2.set(operator.pos, bench.pos);
-    game.grid.updateObject(operator);
-    bench.interact(operator);
+function packAPunchGame(teamMode = TeamMode.Solo) {
+    const game = createGame(teamMode, "specops_complex");
+    const a = game.playerBarn.addTestPlayer({ name: "A" });
+    const b = game.playerBarn.addTestPlayer({ name: "B" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    const powerSwitch = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_power_switch")!;
+    v2.set(a.pos, powerSwitch.pos);
+    game.grid.updateObject(a);
+    powerSwitch.interact(a);
+    const machine = game.map.obstacles.find((obstacle) => obstacle.type === ZombiePackAPunchType)!;
+    const front = v2.add(machine.pos, v2.create(0, -(machine.interactionRad - 0.2)));
+    for (const p of [a, b]) {
+        v2.set(p.pos, front);
+        game.grid.updateObject(p);
+        p.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47", 30);
+        p.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
+    }
+    return { game, ops, a, b, machine };
+}
 
-    expect(operator.specOpsCash).toBe(paidCash - ZombieUpgradeCost);
-    expect(operator.specOpsUpgradedWeapons.has(gun.type)).toBe(true);
-    expect(
-        operator.weaponManager.getAmmoStats(
-            GameObjectDefs.typeToDef(gun.type, "gun"),
-            gun.type,
-        ).maxClip,
-    ).toBeGreaterThan(beforeClip);
+const machineLoot = (game: ReturnType<typeof createGame>, machine: { __id: number }) =>
+    game.lootBarn.loots.find((loot) => loot.mysteryBoxId === machine.__id && !loot.destroyed);
+
+test("Pack-a-Punch: Mark II twins exist for upgradable guns and aren't sold", () => {
+    expect(Object.keys(ZombiePackAPunchNames)).toContain("m9");
+    for (const gun of ZombieMysteryBoxWeapons) {
+        expect(gun in ZombiePackAPunchNames, gun).toBe(true);
+    }
+    for (const [base, name] of Object.entries(ZombiePackAPunchNames)) {
+        const def = GameObjectDefs.typeToDef(packAPunchType(base), "gun") as GunDef;
+        expect(def.zombieUpgraded).toBe(true);
+        expect(def.name).toBe(name);
+        expect(name.endsWith(" Mark II")).toBe(true);
+        expect(def.dualWieldType).toBeUndefined();
+        expect(def.ammo).toBe((GameObjectDefs.typeToDef(base, "gun") as GunDef).ammo);
+        expect(SpecOpsShopCatalog.some((item) => item.sku === packAPunchType(base))).toBe(false);
+    }
+    expect(packAPunchUpgradeFor("raygun")).toBeUndefined();
+});
+
+test("Pack-a-Punch: gun goes in, works, pops out for the payer, who takes it", () => {
+    const { game, ops, a, b, machine } = packAPunchGame(TeamMode.Duo);
+    const reserveBefore = a.invManager.get("762mm");
+    ops.grantCash(a, ZombieUpgradeCost);
+    const paid = a.specOpsCash;
+    machine.interact(a);
+
+    // Paid, gun is gone into the machine (its magazine went back to the reserve).
+    expect(a.specOpsCash).toBe(paid - ZombieUpgradeCost);
+    expect(a.weapons[GameConfig.WeaponSlot.Primary].type).toBe("");
+    expect(a.invManager.get("762mm")).toBe(reserveBefore + 30);
+    expect(machine.button!.onOff).toBe(true);
+    expect(machineLoot(game, machine)).toBeUndefined();
+
+    // Busy: nobody else can start a second upgrade.
+    ops.grantCash(b, ZombieUpgradeCost);
+    const bCash = b.specOpsCash;
+    machine.interact(b);
+    expect(b.specOpsCash).toBe(bCash);
+
+    game.step(ZombiePackAPunchStats.upgradeTime + 0.2);
+    const loot = machineLoot(game, machine)!;
+    expect(loot.type).toBe("ak47_pap");
+    expect(loot.mysteryBoxOwnerId).toBe(a.__id);
+    expect(machine.button!.onOff).toBe(true);
+
+    // Teammate can't take it.
+    b.pickupTicker = 0;
+    b.pickupLoot(loot);
+    expect(loot.destroyed).toBe(false);
+
+    a.pickupTicker = 0;
+    machine.interact(a);
+    expect(loot.destroyed).toBe(true);
+    const slot = a.weapons.findIndex((w) => w.type === "ak47_pap");
+    expect(slot).toBeGreaterThanOrEqual(0);
+    const def = GameObjectDefs.typeToDef("ak47_pap", "gun");
+    const stats = a.weaponManager.getAmmoStats(def, "ak47_pap");
+    const baseStats = a.weaponManager.getAmmoStats(GameObjectDefs.typeToDef("ak47", "gun"), "ak47");
+    expect(stats.maxClip).toBe(Math.ceil(baseStats.maxClip * ZombiePackAPunchStats.magazineMult));
+    expect(a.weapons[slot].ammo).toBe(stats.maxClip);
+
+    game.step(0.1);
+    expect(machine.button!.onOff).toBe(false);
+});
+
+test("Pack-a-Punch: an unclaimed gun is lost after the claim window", () => {
+    const { game, ops, a, machine } = packAPunchGame();
+    ops.grantCash(a, ZombieUpgradeCost);
+    machine.interact(a);
+    game.step(ZombiePackAPunchStats.upgradeTime + 0.2);
+    const loot = machineLoot(game, machine)!;
+    expect(loot).toBeDefined();
+    game.step(ZombiePackAPunchStats.claimTime - 1);
+    expect(loot.destroyed).toBe(false);
+    game.step(1.5);
+    expect(loot.destroyed).toBe(true);
+    expect(a.weapons.some((w) => w.type.startsWith("ak47"))).toBe(false);
+    expect(machine.button!.onOff).toBe(false);
+
+    // Machine is free again.
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "mp5", 30);
+    a.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
+    ops.grantCash(a, ZombieUpgradeCost);
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(true);
+});
+
+test("Pack-a-Punch: refuses Mark II guns, non-upgradable guns, no power, or no cash", () => {
+    const { ops, a, machine } = packAPunchGame();
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47_pap", 45);
+    ops.grantCash(a, ZombieUpgradeCost);
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(false);
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "raygun", 20);
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(false);
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47", 30);
+    a.specOpsCash = ZombieUpgradeCost - 1;
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(false);
+    a.specOpsCash = ZombieUpgradeCost;
+    ops.zombiePowerOn = false;
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(false);
+    ops.zombiePowerOn = true;
+    expect(ops.tryUpgradeZombieWeapon(a, machine)).toBe(true);
+});
+
+test("Pack-a-Punch: the machine sits clear of walls with room to stand in front", () => {
+    const { game, a, machine } = packAPunchGame();
+    // No other solid object overlaps the machine.
+    for (const other of game.map.obstacles) {
+        if (other === machine || other.dead || !other.collidable) continue;
+        expect(collider.intersect(machine.collider, other.collider), other.type).toBeFalsy();
+    }
+    // The pop-out spot and the front of the machine are reachable.
+    // A player can stand in front of the machine (where the gun pops out) without hitting anything.
+    const front = v2.add(machine.pos, v2.create(0, -(1.8 + a.rad + 0.3)));
+    for (const other of game.map.obstacles) {
+        if (other.dead || !other.collidable || !util.sameLayer(other.layer, machine.layer)) continue;
+        expect(!!collider.intersectCircle(other.collider, front, a.rad), other.type).toBe(false);
+    }
 });
 
 test("Last Call relocates the Mystery Box after repeated uses", () => {
@@ -594,7 +746,8 @@ test("Mystery Box charges once, synchronizes its roll, and replaces the held gun
     expect(box.button?.canUse).toBe(false);
     let preview = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id)!;
     expect(preview.mysteryBoxLocked).toBe(true);
-    expect(ZombieMysteryBoxWeapons).toContain(preview.type);
+    // The cycling preview is any box gun, or the Ray Gun flashing by as a tease.
+    expect([...ZombieMysteryBoxWeapons, ZombieRayGun.type]).toContain(preview.type);
 
     const teammateCash = teammate.specOpsCash;
     box.interact(teammate);
@@ -734,13 +887,16 @@ test("Ray Gun: wonder weapon def, 50AE, box-only (never in the shop)", () => {
     expect(ZombieMysteryBoxWeapons).not.toContain(ZombieRayGun.type);
 });
 
-test("Ray Gun: 2% box odds, other 22 guns share the rest", () => {
+test("Ray Gun: box odds follow ZombieRayGun.boxChance, other 22 guns share the rest", () => {
     const { ops, a } = rayGunGame(TeamMode.Solo);
+    const chance = ZombieRayGun.boxChance;
+    expect(chance).toBeGreaterThan(0);
+    expect(chance).toBeLessThan(1);
     expect(ZombieMysteryBoxWeapons).toHaveLength(22);
     expect(ops.rollMysteryBoxResult(a, 0)).toBe(ZombieRayGun.type);
-    expect(ops.rollMysteryBoxResult(a, 0.0199)).toBe(ZombieRayGun.type);
+    expect(ops.rollMysteryBoxResult(a, chance * 0.99)).toBe(ZombieRayGun.type);
     for (let i = 0; i < 50; i++) {
-        const result = ops.rollMysteryBoxResult(a, 0.02 + (i / 50) * 0.98);
+        const result = ops.rollMysteryBoxResult(a, chance + (i / 50) * (1 - chance));
         expect(ZombieMysteryBoxWeapons).toContain(result);
     }
     let hits = 0;
@@ -748,8 +904,9 @@ test("Ray Gun: 2% box odds, other 22 guns share the rest", () => {
     for (let i = 0; i < rolls; i++) {
         if (ops.rollMysteryBoxResult(a) === ZombieRayGun.type) hits++;
     }
-    expect(hits / rolls).toBeGreaterThan(0.012);
-    expect(hits / rolls).toBeLessThan(0.028);
+    // Within ~5 standard deviations of the configured chance.
+    const sd = Math.sqrt((chance * (1 - chance)) / rolls);
+    expect(Math.abs(hits / rolls - chance)).toBeLessThan(5 * sd);
 });
 
 test("Ray Gun: holding one or leaving a dropped one on the floor blocks rolling it; teammates roll their own", () => {
@@ -996,5 +1153,107 @@ test("Zombies only ever spawns zombies: no soldiers, bosses, or Ironclads", () =
         expect(enemy.weapons[GameConfig.WeaponSlot.Secondary].type).toBe("");
         expect(enemy.specOpsStrobeTank).toBe(false);
         expect(enemy.specOpsSuicideVest).toBe(false);
+    }
+});
+
+test("Normal zombies wear one of the three zombie bodies, which players can't equip", async () => {
+    const { UnlockDefs } = await import("../../shared/defs/gameObjects/unlockDefs.ts");
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    const zombieBodies = ["outfitZombie01", "outfitZombie02", "outfitZombie03"];
+    for (const body of zombieBodies) {
+        const def = GameObjectDefs.typeToDef(body, "outfit");
+        expect(def.skinImg.baseSprite).toBe(`player-base-zombie-${body.slice(-2)}.img`);
+        expect(UnlockDefs.unlock_default.unlocks).not.toContain(body);
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) seen.add(ops.spawnEnemyPublic("zombie_walker").outfit);
+    for (const outfit of seen) expect(zombieBodies).toContain(outfit);
+    expect(seen.size).toBeGreaterThan(1);
+});
+
+test("Ray Gun: legendary ring on the floor and it flashes by in the box cycle", () => {
+    const def = GameObjectDefs.typeToDef(ZombieRayGun.type, "gun") as GunDef;
+    expect(def.lootImg.legendaryRing).toBe("loot-circle-legendary-ring.img");
+    expect(GameObjectDefs.typeToDef("explosion_legendary_reveal", "explosion").damage).toBe(0);
+
+    const { ops } = rayGunGame(TeamMode.Solo);
+    const pick = (previous: string) =>
+        (ops as unknown as { pickMysteryBoxWeapon(previous: string): string }).pickMysteryBoxWeapon(previous);
+    const seen = new Set<string>();
+    let previous = "";
+    for (let i = 0; i < 2000; i++) {
+        previous = pick(previous);
+        seen.add(previous);
+    }
+    expect(seen.has(ZombieRayGun.type)).toBe(true);
+    for (const gun of ZombieMysteryBoxWeapons) expect(seen.has(gun), gun).toBe(true);
+    expect(seen.size).toBe(ZombieMysteryBoxWeapons.length + 1);
+});
+
+test("Ray Gun: the box reveal plays the legendary burst", () => {
+    const { game, a: buyer } = rayGunGame(TeamMode.Solo);
+    const box = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_mystery_box")!;
+    v2.set(buyer.pos, v2.add(box.pos, v2.create(0, -4.5)));
+    game.grid.updateObject(buyer);
+    game.specOps!.grantCash(buyer, ZombieMysteryBoxCost);
+    const random = Math.random;
+    Math.random = () => 0;
+    try {
+        box.interact(buyer);
+    } finally {
+        Math.random = random;
+    }
+    let burst = false;
+    const t0 = ZombieMysteryBoxRollDuration + 0.3;
+    for (let t = 0; t < t0; t += 0.1) {
+        game.explosionBarn.newExplosions.length = 0;
+        game.step(0.1);
+        burst ||= game.explosionBarn.newExplosions.some((e) => e.type === "explosion_legendary_reveal");
+    }
+    expect(burst).toBe(true);
+    const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
+    expect(prize.type).toBe(ZombieRayGun.type);
+});
+
+test("Dev cheat: set and add cash (clamped to the cap, not counted as earned)", async () => {
+    const { Config } = await import("../../server/src/config.ts");
+    const { EditMsg } = await import("../../shared/net/editMsg.ts");
+    const { SpecOpsCashCap } = await import("../../shared/defs/maps/specOpsShop.ts");
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "Dev" });
+    game.update(0.1);
+    const allow = Config.debug.allowEditMsg;
+    Config.debug.allowEditMsg = true;
+    try {
+        const earned = player.specOpsCashEarned;
+        const send = (setCash: number, addCash: number) => {
+            const msg = new EditMsg();
+            msg.setCash = setCash;
+            msg.addCash = addCash;
+            player.processEditMsg(msg);
+        };
+        send(25000, 0);
+        expect(player.specOpsCash).toBe(25000);
+        send(-1, 5000);
+        expect(player.specOpsCash).toBe(30000);
+        send(0, 0);
+        expect(player.specOpsCash).toBe(0);
+        send(SpecOpsCashCap + 999, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+        expect(player.specOpsCashEarned).toBe(earned);
+
+        // A plain edit message (no cash fields) leaves cash alone.
+        send(-1, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+
+        // With edit messages disabled (prod), cheats do nothing.
+        Config.debug.allowEditMsg = false;
+        send(100, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+    } finally {
+        Config.debug.allowEditMsg = allow;
     }
 });

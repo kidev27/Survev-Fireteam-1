@@ -90,6 +90,22 @@ export interface ObstacleDef {
      * many doors opening, etc. Which obstacles are affected, how they are affected, and after
      * how much time is all controlled by the properties on this object
      */
+    /**
+     * Client-only effect while the button is on (e.g. Pack-a-Punch working):
+     * an overlay sprite that spins, and ring particles from the same point.
+     */
+    buttonFx?: {
+        /** Overlay sprite, always drawn; it only spins while the button is on. */
+        spinSprite: string;
+        spinScale: number;
+        /** World offset from the obstacle center. */
+        offset: Vec2;
+        /** Radians per second while on. */
+        spinSpeed: number;
+        ringParticle: string;
+        /** Seconds between ring particles while on. */
+        ringInterval: number;
+    };
     button?: {
         interactionRad: number;
         interactionText: string;

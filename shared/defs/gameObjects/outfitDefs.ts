@@ -32,6 +32,8 @@ export interface OutfitDef {
     obstacleType?: string;
     baseScale?: number;
     ghillie?: boolean;
+    /** Enemy-only skin (e.g. Zombies bodies): never shown in the loadout menu. */
+    aiOnly?: boolean;
     // if on faction mode, the skin will only work for the specified ID
     teamId?: FactionTeam;
 }
@@ -760,6 +762,67 @@ const SkinDefs: Record<string, OutfitDef> = {
         lootImg: {
             sprite: "loot-shirt-outfitWoodland.img",
             tint: 0xffffff,
+        },
+    }),
+    // Zombies: normal zombie bodies (AI only; never unlockable or dropped).
+    outfitZombie01: defineOutfitSkin("outfitBase", {
+        name: "Zombie",
+        aiOnly: true,
+        noDropOnDeath: true,
+        noDrop: true,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-zombie-01.img",
+            handTint: 0xb8b58a,
+            handSprite: "player-hands-01.img",
+            footTint: 0xb8b58a,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x6c6756,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0xc2bf8e,
+        },
+    }),
+    outfitZombie02: defineOutfitSkin("outfitBase", {
+        name: "Zombie",
+        aiOnly: true,
+        noDropOnDeath: true,
+        noDrop: true,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-zombie-02.img",
+            handTint: 0xacaf80,
+            handSprite: "player-hands-01.img",
+            footTint: 0xacaf80,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x6c6756,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0xb6b98a,
+        },
+    }),
+    outfitZombie03: defineOutfitSkin("outfitBase", {
+        name: "Zombie",
+        aiOnly: true,
+        noDropOnDeath: true,
+        noDrop: true,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-zombie-03.img",
+            handTint: 0xbcb282,
+            handSprite: "player-hands-01.img",
+            footTint: 0xbcb282,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x6c6756,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0xc6bb8a,
         },
     }),
     outfitRoyalFortune: defineOutfitSkin("outfitBase", {

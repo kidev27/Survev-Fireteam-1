@@ -457,6 +457,30 @@ const ExplosionEffectDefs: Record<string, ExplotionDef> = {
         shakeDur: 0,
         lifetime: 1,
     },
+    // Mystery Box reveals a wonder weapon: soft rainbow ring burst + sparkles.
+    legendaryReveal: {
+        burst: {
+            particle: "legendaryRevealRing",
+            scale: 1,
+            sound: {
+                grass: "legendary_reveal_01",
+                water: "legendary_reveal_01",
+                volume: 0.8,
+            },
+        },
+        scatter: {
+            particle: "legendaryRevealSpark",
+            count: 18,
+            speed: {
+                min: 4,
+                max: 11,
+            },
+        },
+        rippleCount: 0,
+        shakeStr: 0,
+        shakeDur: 0,
+        lifetime: 1.5,
+    },
     rounds_sg: {
         burst: {
             particle: "explosionRounds",

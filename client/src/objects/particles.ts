@@ -2252,6 +2252,61 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.31, util.random(0.55, 0.7), 1));
         },
     },
+    // Pack-a-Punch: rings pulsing out of the machine's core while it works.
+    papRing: {
+        image: ["part-pap-ring-01.img"],
+        life: 0.7,
+        drag: 0,
+        rotVel: 0,
+        scale: {
+            start: 0.32,
+            end: 0.95,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 0.9,
+            end: 0,
+            lerp: new Range(0.2, 1),
+        },
+        color: 0x9fe8ff,
+    },
+    // Wonder-weapon reveal at the Mystery Box: the rainbow ring art, expanding out.
+    legendaryRevealRing: {
+        image: ["loot-circle-legendary-ring.img"],
+        life: 0.9,
+        drag: 0,
+        rotVel: 2.5,
+        scale: {
+            start: 0.15,
+            end: 0.6,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.35, 1),
+        },
+        color: 0xffffff,
+    },
+    legendaryRevealSpark: {
+        image: ["part-spark-02.img"],
+        life: new Range(0.5, 0.9),
+        drag: new Range(3, 5),
+        rotVel: new Range(-6, 6),
+        scale: {
+            start: new Range(0.12, 0.2),
+            end: 0.02,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.6, 1),
+        },
+        color: function() {
+            return util.rgbToInt(util.hsvToRgb(Math.random(), 0.45, 1));
+        },
+    },
     explosionBomb: {
         image: ["part-frag-burst-02.img"],
         life: 0.5,

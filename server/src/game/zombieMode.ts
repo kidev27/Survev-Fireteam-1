@@ -1,4 +1,5 @@
 import { type SpecOpsDifficulty, specOpsDifficultyMods } from "../../../shared/defs/maps/specOpsShop.ts";
+import { ZombiePackAPunchStats } from "../../../shared/defs/maps/zombiePackAPunch.ts";
 
 /**
  * Zombie Survival content lives separately from the legacy Spec Ops roster.
@@ -30,9 +31,9 @@ export const ZombieLoadouts: Record<ZombieClass, ZombieLoadout> = {
     zombie_walker: {
         name: "Zombie",
         gun: "",
-        // Existing Survev outfits are placeholders until custom art is ready.
-        outfits: ["outfitDarkShirt", "outfitKhaki", "outfitWoodland"],
-        outfit: "outfitDarkShirt",
+        // Three normal-zombie body variants so a horde doesn't look copy-pasted.
+        outfits: ["outfitZombie01", "outfitZombie02", "outfitZombie03"],
+        outfit: "outfitZombie01",
         chest: "",
         helmet: "",
         backpack: "backpack00",
@@ -67,14 +68,15 @@ export const ZombieEconomy = {
 export const ZombieKillBounty = ZombieEconomy.killCash;
 
 export const ZombieMysteryBoxCost = 1000;
-export const ZombieMysteryBoxRollDuration = 2.4;
-export const ZombieMysteryBoxCycleInterval = 0.16;
+export const ZombieMysteryBoxRollDuration = 4;
+export const ZombieMysteryBoxCycleInterval = 0.19;
 export const ZombieMysteryBoxClaimDuration = 10;
 export const ZombieMysteryBoxCooldown = 1.25;
 export const ZombieMysteryBoxRelocateUses = 3;
-export const ZombieUpgradeCost = 5000;
-export const ZombieUpgradeDamageMult = 1.35;
-export const ZombieUpgradeMagazineMult = 1.5;
+// Pack-a-Punch numbers live in shared/defs/maps/zombiePackAPunch.ts.
+export const ZombieUpgradeCost = ZombiePackAPunchStats.cost;
+export const ZombieUpgradeDamageMult = ZombiePackAPunchStats.damageMult;
+export const ZombieUpgradeMagazineMult = ZombiePackAPunchStats.magazineMult;
 
 export const ZombieBuyGateCosts = {
     zombie_buy_gate_750: 750,
@@ -116,6 +118,9 @@ export const ZombieMysteryBoxWeapons = [
 
 export type ZombieMysteryBoxWeapon = typeof ZombieMysteryBoxWeapons[number];
 
+/** The only throwables Max Ammo refills in Zombies. Everything else is left as-is. */
+export const ZombieMaxAmmoThrowables: readonly string[] = ["frag", "mirv"];
+
 /**
  * Ray Gun (wonder weapon). The box rolls it at `boxChance`; the other box guns
  * split the rest evenly. A player can't roll it while holding one or while a
@@ -123,7 +128,7 @@ export type ZombieMysteryBoxWeapon = typeof ZombieMysteryBoxWeapons[number];
  */
 export const ZombieRayGun = {
     type: "raygun",
-    boxChance: 0.02,
+    boxChance: 0.04,
     /** Splash (explosion_raygun) falls from damage at rad.min to this fraction at rad.max. */
     splashEdgeMult: 0.5,
     /** Flat damage to the shooter when caught in their own splash. */

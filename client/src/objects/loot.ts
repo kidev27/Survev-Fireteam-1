@@ -27,6 +27,9 @@ import { Pool } from "./objectPool.ts";
 import type { Emitter, ParticleBarn } from "./particles.ts";
 import type { AbstractObject, Player } from "./player.ts";
 
+/** Seconds for the legendary rainbow ring to complete one orbit. */
+const LegendaryRingPeriod = 4;
+
 export class Loot implements AbstractObject {
     __id!: number;
     __type!: ObjectType.Loot;
@@ -35,6 +38,8 @@ export class Loot implements AbstractObject {
     ticker = 0;
     playDropSfx = false;
     container = new PIXI.Sprite();
+    /** Legendary rainbow ring (Ray Gun); orbits slowly behind the icon. */
+    ringSprite = new PIXI.Sprite();
     sprite = new PIXI.Sprite();
     /** Icon scale inside the border, kept so spinning can squash it. */
     innerScale = 0.8;
@@ -59,6 +64,9 @@ export class Loot implements AbstractObject {
         this.container.scale.set(1, 1);
         this.sprite.anchor.set(0.5, 0.5);
         this.sprite.scale.set(0.8, 0.8);
+        this.ringSprite.anchor.set(0.5, 0.5);
+        this.ringSprite.visible = false;
+        this.container.addChild(this.ringSprite);
         this.container.addChild(this.sprite);
     }
 
@@ -131,11 +139,21 @@ export class Loot implements AbstractObject {
             this.container.texture = itemDef.lootImg.border
                 ? PIXI.Texture.from(itemDef.lootImg.border)
                 : PIXI.Texture.EMPTY;
-            const wonderWeapon = itemDef.type === "gun" && !!(itemDef as GunDef).wonderWeapon;
+            // Wonder weapons and Pack-a-Punch Mark II guns keep their own glow ring + tint.
+            const wonderWeapon = itemDef.type === "gun"
+                && (!!(itemDef as GunDef).wonderWeapon || !!(itemDef as GunDef).zombieUpgraded);
             if (this.isPreloadedGun && !wonderWeapon) {
                 this.container.texture = PIXI.Texture.from("loot-circle-outer-06.img");
             }
             const ammo = GameObjectDefs.typeToDefSafe((itemDef as GunDef).ammo) as AmmoDef;
+            const legendaryRing = itemDef.type === "gun"
+                ? (itemDef as GunDef).lootImg.legendaryRing
+                : undefined;
+            this.ringSprite.visible = !!legendaryRing;
+            if (legendaryRing) {
+                this.ringSprite.texture = PIXI.Texture.from(legendaryRing);
+                this.ringSprite.rotation = 0;
+            }
             if (wonderWeapon) {
                 // Wonder weapons keep their own glow ring + tint (client-only).
                 this.container.tint = itemDef.lootImg.borderTint;
@@ -244,6 +262,10 @@ export class LootBarn {
                             loot.sprite.rotation = angle;
                         }
                     }
+                }
+                if (loot.ringSprite.visible) {
+                    // Rainbow colors orbit the ring once every LegendaryRingPeriod seconds.
+                    loot.ringSprite.rotation = (loot.ticker / LegendaryRingPeriod) * Math.PI * 2;
                 }
                 let pos = loot.pos;
                 if (camera.m_interpEnabled) {

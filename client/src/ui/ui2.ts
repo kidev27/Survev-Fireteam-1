@@ -53,6 +53,45 @@ const WeaponSlotToBind = {
     [GameConfig.WeaponSlot.Throwable]: Input.EquipThrowable,
 };
 
+/** Same breakpoint as the compact weapon-slot CSS (game.css); those layouts keep their "…" cut-off. */
+const CompactWeaponSlotQuery = "(max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx)";
+const WeaponNameMaxPx = 18;
+const WeaponNameMinOneLinePx = 14;
+const WeaponNameMinTwoLinePx = 10;
+
+/**
+ * Desktop weapon slots: keep a gun name clear of its icon. Names that fit stay
+ * full size on one line; long ones shrink a little, then wrap to two lines and
+ * shrink until they fit.
+ */
+function fitWeaponName(el: HTMLElement) {
+    el.classList.remove("ui-weapon-name-fit", "ui-weapon-name-wrap");
+    el.style.fontSize = "";
+    if (!el.textContent || window.matchMedia(CompactWeaponSlotQuery).matches) return;
+    el.classList.add("ui-weapon-name-fit");
+    // Not laid out yet (HUD hidden): the next refit (type change / resize) will size it.
+    if (el.clientWidth === 0) return;
+
+    const overflows = () =>
+        el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+    let size = WeaponNameMaxPx;
+    while (overflows() && size > WeaponNameMinOneLinePx) {
+        size -= 1;
+        el.style.fontSize = `${size}px`;
+    }
+    if (!overflows()) return;
+
+    el.classList.add("ui-weapon-name-wrap");
+    // Wrap only at spaces: a word joiner after "-" keeps "M4A1-S" together.
+    el.textContent = (el.textContent ?? "").replace(/-(?!\u2060)/g, "-\u2060");
+    size = WeaponNameMinOneLinePx;
+    el.style.fontSize = `${size}px`;
+    while (overflows() && size > WeaponNameMinTwoLinePx) {
+        size -= 0.5;
+        el.style.fontSize = `${size}px`;
+    }
+}
+
 function domElemById(id: string) {
     return document.getElementById(id)!;
 }
@@ -334,6 +373,7 @@ export class UiManager2 {
     eventListeners = [] as EventListeners[];
     clearQueuedItemActions: () => void;
     onKeyUp: (e: KeyboardEvent) => void;
+    onResizeWeaponNames: () => void;
     // Game-item handling. Game item UIs support two actions:
     // left-click to use, and right-click to drop.
     itemActions = [] as Array<{
@@ -615,6 +655,11 @@ export class UiManager2 {
             }
         };
         window.addEventListener("keyup", this.onKeyUp);
+
+        this.onResizeWeaponNames = () => {
+            for (const weapon of this.dom.weapons) fitWeaponName(weapon.type);
+        };
+        window.addEventListener("resize", this.onResizeWeaponNames);
     }
 
     m_free() {
@@ -627,6 +672,7 @@ export class UiManager2 {
 
         window.removeEventListener("mouseup", this.clearQueuedItemActions);
         window.removeEventListener("keyup", this.onKeyUp);
+        window.removeEventListener("resize", this.onResizeWeaponNames);
     }
 
     pushAction(itemAction: { action: string; type: string; data: string }) {
@@ -1280,9 +1326,15 @@ export class UiManager2 {
                     F = helpers.getCssTransformFromGameType(L.type);
                 }
                 R.type.innerHTML = q;
+                fitWeaponName(R.type);
                 R.image.src = helpers.getSvgFromGameType(L.type);
                 R.image.style.display = j ? "inline" : "none";
                 R.image.style.transform = F;
+                // Pack-a-Punch Mark II guns get a pulsing glow on their HUD icon.
+                R.image.classList.toggle(
+                    "ui-weapon-pap",
+                    j?.type === "gun" && !!j.zombieUpgraded,
+                );
             }
             if (B.equipped) {
                 R.div.style.backgroundColor = L.equipped

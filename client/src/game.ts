@@ -47,7 +47,7 @@ import { LootBarn } from "./objects/loot.ts";
 import { Creator } from "./objects/objectPool.ts";
 import { ParticleBarn } from "./objects/particles.ts";
 import { PlaneBarn } from "./objects/plane.ts";
-import { type Player, PlayerBarn } from "./objects/player.ts";
+import { type Player, PlayerBarn, setPackAPunchCamoEnabled } from "./objects/player.ts";
 import { ProjectileBarn } from "./objects/projectile.ts";
 import { ShotBarn } from "./objects/shot.ts";
 import { SmokeBarn } from "./objects/smoke.ts";
@@ -254,6 +254,7 @@ export class Game {
 
     init() {
         this.m_canvasMode = this.m_pixi.renderer.type == PIXI.RENDERER_TYPE.CANVAS;
+        setPackAPunchCamoEnabled(!this.m_canvasMode);
 
         // Modules
         this.m_touch = new Touch(this.m_input, this.m_config);

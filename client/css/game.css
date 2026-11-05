@@ -3634,6 +3634,24 @@ body:not(.ui-specops-mode) #ui-loot-armor_plate {
   text-align: center;
 }
 
+/* Desktop slots (set by fitWeaponName in ui2.ts): keep long names clear of the icon. */
+.ui-weapon-name.ui-weapon-name-fit {
+  left: 68px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ui-weapon-name.ui-weapon-name-wrap {
+  margin-top: 0;
+  bottom: 3px;
+  max-height: 2.05em;
+  line-height: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
 .ui-weapon-number {
   position: absolute;
   font-size: 24px;
@@ -3663,6 +3681,21 @@ body:not(.ui-specops-mode) #ui-loot-armor_plate {
   left: 4px;
   background-size: 60px;
   background-repeat: no-repeat;
+}
+
+/* Zombies Pack-a-Punch: Mark II guns glow purple/cyan in the weapon slots. */
+.ui-weapon-image.ui-weapon-pap {
+  animation: ui-weapon-pap-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes ui-weapon-pap-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #9b6bff) drop-shadow(0 0 6px rgba(155, 107, 255, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px #4fe3ff) drop-shadow(0 0 9px rgba(79, 227, 255, 0.7));
+  }
 }
 
 #ui-weapon-id-4 .ui-weapon-image {

@@ -1478,8 +1478,6 @@ export class Player extends BaseGameObject {
     specOpsSpeedMult = 1;
     /** Enemy bullet damage scale; humans / allies stay at 1. */
     specOpsDamageMult = 1;
-    /** Gun definitions upgraded at Last Call's powered workbench. */
-    readonly specOpsUpgradedWeapons = new Set<string>();
     /** Seconds remaining before Spec Ops out-of-combat regen starts. */
     specOpsCombatTimer = 0;
     specOpsKind: "" | "enemy" | "ally" | "sentry" = "";
@@ -5088,6 +5086,12 @@ export class Player extends BaseGameObject {
             && this.game.specOps
         ) {
             this.game.specOps.jumpToWave(msg.setWave);
+        }
+
+        if ((msg.setCash >= 0 || msg.addCash > 0) && this.game.specOps) {
+            const target = msg.setCash >= 0 ? msg.setCash : this.specOpsCash + msg.addCash;
+            this.game.specOps.setCashForDebug(this, target);
+            this.game.logger.info(`[cheat] Set cash=${this.specOpsCash} for ${this.name}`);
         }
         // ────────────────────────────────────────────────────────────────────
     }

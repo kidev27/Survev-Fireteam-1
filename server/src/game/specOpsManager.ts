@@ -73,6 +73,13 @@ import {
     specOpsUnequipPerk,
     specOpsWaveBonus,
 } from "../../../shared/defs/maps/specOpsShop.ts";
+import {
+    packAPunchArtOffset,
+    packAPunchUpgradeFor,
+    ZombiePackAPunchSprite,
+    ZombiePackAPunchStats,
+    ZombiePackAPunchType,
+} from "../../../shared/defs/maps/zombiePackAPunch.ts";
 import { zombiePerkMachine } from "../../../shared/defs/maps/zombiePerks.ts";
 import {
     isZombiePowerUpType,
@@ -139,6 +146,7 @@ import {
     ZombieMysteryBoxCycleInterval,
     ZombieMysteryBoxRelocateUses,
     ZombieMysteryBoxRollDuration,
+    ZombieMaxAmmoThrowables,
     ZombieMysteryBoxWeapons,
     ZombieRayGun,
     ZombieUpgradeCost,
@@ -5685,6 +5693,16 @@ export const SpecOpsAbandonedTimeout = 90;
 /** Seconds without movement/shoot/interact before a connected operator is treated as idle. */
 export const SpecOpsIdleTimeout = 300;
 
+interface ZombiePackAPunchState {
+    machine: Obstacle;
+    phase: "working" | "ready";
+    ticker: number;
+    ownerId: number;
+    /** Mark II gun type that pops out. */
+    result: string;
+    loot?: Loot;
+}
+
 interface ZombieMysteryBoxState {
     box: Obstacle;
     phase: "rolling" | "claim" | "cooldown";
@@ -5793,6 +5811,7 @@ export class SpecOpsManager implements PracticeHost {
     zombiePowerUpHat: ZombiePowerUpType[] = [];
     /** Drops earned on a zombie that died where players can't reach. */
     private zombiePendingDrops = 0;
+    private packAPunchState: ZombiePackAPunchState | undefined;
     /** Team-size scale for this round, fixed when the round starts. */
     private zombieRoundDropScale = 1;
     private lastZombiePowerUpHud = "";
@@ -5875,6 +5894,7 @@ export class SpecOpsManager implements PracticeHost {
         for (const player of this.livingHumans()) {
             for (const item of Object.keys(player.invManager.items) as InventoryItem[]) {
                 const def = GameObjectDefs.typeToDef(item);
+                if (def.type === "throwable" && !ZombieMaxAmmoThrowables.includes(item)) continue;
                 if (def.type !== "ammo" && def.type !== "throwable") continue;
                 player.invManager.set(item, player.invManager.getMaxCapacity(item));
             }
@@ -6056,12 +6076,16 @@ export class SpecOpsManager implements PracticeHost {
         box.setDirty();
     }
 
-    /** Gun shown while the box cycles (cosmetic only; the result is picked at roll start). */
+    /**
+     * Gun shown while the box cycles. Cosmetic only (the result is picked at roll
+     * start), so the Ray Gun can flash by as a tease, like BO2.
+     */
     private pickMysteryBoxWeapon(previous = ""): string {
         const pool = ZombieMysteryBoxWeapons;
         let weapon = previous;
         while (weapon === previous) {
-            weapon = pool[Math.floor(util.random(0, pool.length))];
+            const idx = Math.floor(util.random(0, pool.length + 1));
+            weapon = idx >= pool.length ? ZombieRayGun.type : pool[idx];
         }
         return weapon;
     }
@@ -6233,6 +6257,14 @@ export class SpecOpsManager implements PracticeHost {
                 state.weapon = this.resolveMysteryBoxResult(state);
                 this.replaceMysteryBoxLoot(state, false);
                 this.setMysteryBoxVisual(state.box, true, true);
+                if ((GameObjectDefs.typeToDefSafe(state.weapon) as GunDef | undefined)?.wonderWeapon) {
+                    // Legendary reveal: rainbow burst + chime on clients (visual only).
+                    this.game.explosionBarn.addVisualExplosion(
+                        "explosion_legendary_reveal",
+                        v2.copy(state.box.pos),
+                        state.box.layer,
+                    );
+                }
             }
             return;
         }
@@ -6339,7 +6371,7 @@ export class SpecOpsManager implements PracticeHost {
             if (obstacle.type === "zombie_power_gate" && !obstacle.destroyed) {
                 obstacle.destroy();
             }
-            if (obstacle.type === "zombie_upgrade_bench" && obstacle.button) {
+            if (obstacle.type === ZombiePackAPunchType && obstacle.button) {
                 obstacle.button.canUse = true;
                 obstacle.button.seq++;
                 obstacle.setDirty();
@@ -6377,36 +6409,114 @@ export class SpecOpsManager implements PracticeHost {
         return true;
     }
 
-    tryUpgradeZombieWeapon(player: Player, bench: Obstacle): boolean {
+    /**
+     * Pack-a-Punch (BO2 style): pay, the held gun goes into the machine, it works
+     * for `upgradeTime`, then the Mark II gun pops out for the payer only. Unclaimed
+     * guns are lost after `claimTime`. Interacting again during the reveal takes it.
+     */
+    tryUpgradeZombieWeapon(player: Player, machine: Obstacle): boolean {
         if (
             !this.zombieMode
             || !this.zombiePowerOn
-            || bench.type !== "zombie_upgrade_bench"
-            || !bench.button?.canUse
+            || machine.type !== ZombiePackAPunchType
+            || !machine.button?.canUse
         ) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
-        if (!collider.intersectCircle(bench.collider, player.pos, bench.interactionRad + player.rad)) {
+        if (!collider.intersectCircle(machine.collider, player.pos, machine.interactionRad + player.rad)) {
             return false;
+        }
+
+        const active = this.packAPunchState;
+        if (active) {
+            if (
+                active.machine !== machine
+                || active.phase !== "ready"
+                || active.ownerId !== player.__id
+                || !active.loot
+            ) return false;
+            player.pickupLoot(active.loot);
+            return active.loot.destroyed;
         }
 
         const slot = player.curWeapIdx;
         const weapon = player.weapons[slot];
         const weaponDef = GameObjectDefs.typeToDefSafe(weapon.type);
         if (!weaponDef || weaponDef.type !== "gun") return false;
-        if (player.specOpsUpgradedWeapons.has(weapon.type)) return false;
+        const upgraded = packAPunchUpgradeFor(weapon.type);
+        if (!upgraded) return false;
         if (player.specOpsCash < ZombieUpgradeCost) return false;
 
         this.grantCash(player, -ZombieUpgradeCost);
-        player.specOpsUpgradedWeapons.add(weapon.type);
-        const ammo = player.weaponManager.getAmmoStats(weaponDef, weapon.type);
-        weapon.ammo = ammo.maxClip;
-        player.invManager.give(weaponDef.ammo as InventoryItem, ammo.maxClip * 2);
-        player.weapsDirty = true;
-        bench.button.onOff = !bench.button.onOff;
-        bench.button.seq++;
-        bench.setDirty();
-        this.game.playerBarn.addMapPing("ping_unlock", bench.pos);
+        // The gun goes into the machine; rounds left in the magazine go back to the reserve.
+        player.cancelAction();
+        if (weapon.ammo > 0 && player.invManager.isValid(weaponDef.ammo)) {
+            player.invManager.giveAndDrop(weaponDef.ammo as InventoryItem, weapon.ammo);
+        }
+        player.weaponManager.setWeapon(slot, "", 0);
+
+        this.packAPunchState = {
+            machine,
+            phase: "working",
+            ticker: ZombiePackAPunchStats.upgradeTime,
+            ownerId: player.__id,
+            result: upgraded,
+        };
+        this.setPackAPunchVisual(machine, true);
         return true;
+    }
+
+    /** Where the upgraded gun pops out: on the machine's intake slot. */
+    private packAPunchPopPos(machine: Obstacle): Vec2 {
+        const slot = packAPunchArtOffset(ZombiePackAPunchSprite.slot);
+        return v2.add(machine.pos, v2.create(slot.x, slot.y));
+    }
+
+    private setPackAPunchVisual(machine: Obstacle, working: boolean): void {
+        if (!machine.button || machine.button.onOff === working) return;
+        machine.button.onOff = working;
+        machine.button.seq++;
+        machine.setDirty();
+    }
+
+    private tickPackAPunch(dt: number): void {
+        const state = this.packAPunchState;
+        if (!state) return;
+        const { machine } = state;
+        if (machine.dead || machine.destroyed) {
+            if (state.loot && !state.loot.destroyed) state.loot.destroy();
+            this.packAPunchState = undefined;
+            return;
+        }
+
+        state.ticker -= dt;
+        if (state.phase === "working") {
+            if (state.ticker > 0) return;
+            const loot = this.game.lootBarn.addLoot(
+                state.result,
+                this.packAPunchPopPos(machine),
+                machine.layer,
+                1,
+                { pushSpeed: 0, noSideAmmo: true, source: "map" },
+            );
+            if (loot) {
+                loot.isPreloadedGun = true;
+                // Reuses the Mystery Box rules: full magazine on pickup, payer-only claim.
+                loot.mysteryBoxId = machine.__id;
+                loot.mysteryBoxOwnerId = state.ownerId;
+                loot.ignoreObstacleId = machine.__id;
+            }
+            state.loot = loot;
+            state.phase = "ready";
+            state.ticker = ZombiePackAPunchStats.claimTime;
+            return;
+        }
+
+        if (!state.loot || state.loot.destroyed || state.ticker <= 0) {
+            // Claimed, or left too long (BO2: the gun is gone).
+            if (state.loot && !state.loot.destroyed) state.loot.destroy();
+            this.packAPunchState = undefined;
+            this.setPackAPunchVisual(machine, false);
+        }
     }
 
     /** Next free lobby spawn on Last Call (lastCallLayout.ts), or undefined on other maps. */
@@ -6424,7 +6534,7 @@ export class SpecOpsManager implements PracticeHost {
         if (!this.zombieMode || this.game.config.mapName !== "specops_complex") return;
         this.zombiePowerOn = false;
         for (const obstacle of this.game.map.obstacles) {
-            if (obstacle.type === "zombie_upgrade_bench" && obstacle.button) {
+            if (obstacle.type === ZombiePackAPunchType && obstacle.button) {
                 obstacle.button.canUse = false;
                 obstacle.button.onOff = false;
                 obstacle.button.seq++;
@@ -7127,7 +7237,10 @@ export class SpecOpsManager implements PracticeHost {
         if (this.game.over) return;
         if (!this.game.started) return;
 
-        if (this.zombieMode) this.tickZombiePowerUps(dt);
+        if (this.zombieMode) {
+            this.tickZombiePowerUps(dt);
+            this.tickPackAPunch(dt);
+        }
 
         this.tickAbandonedLobby(dt);
         if (this.game.over) return;
@@ -8066,6 +8179,13 @@ export class SpecOpsManager implements PracticeHost {
         brain.anchor = host;
         this.brains.set(player, brain);
         return player;
+    }
+
+    /** Dev cheat: set a human's cash exactly (clamped to the cash cap; not counted as earned). */
+    setCashForDebug(player: Player, amount: number): void {
+        if (player.specOpsAi) return;
+        player.specOpsCash = math.clamp(Math.floor(amount), 0, SpecOpsCashCap);
+        player.specOpsCashDirty = true;
     }
 
     grantCash(player: Player, amount: number, dirty = true, earned = true): void {

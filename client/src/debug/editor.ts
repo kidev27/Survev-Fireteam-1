@@ -2,6 +2,7 @@ import $ from "jquery";
 import { type FolderApi, Pane, type TabPageApi } from "tweakpane";
 
 import { RoleDefs } from "../../../shared/defs/gameObjects/roleDefs.ts";
+import { SpecOpsCashCap } from "../../../shared/defs/maps/specOpsShop.ts";
 import {
     SpecOpsAllyRoles,
     SpecOpsEnemyClasses,
@@ -80,6 +81,9 @@ export class Editor {
     sendCheatGive = true;
     sendCheatHealth = true;
     sendCheatWave = true;
+    /** One-shot cash cheat (false at start so loading the editor never changes cash). */
+    sendCheatSetCash = false;
+    cheatAddCash = 0;
 
     constructor(config: ConfigManager) {
         this.config = config;
@@ -511,6 +515,28 @@ export class Editor {
                 this.config.set("debugTools", this.toolParams);
             });
 
+            // Cash (Spec Ops / Zombies)
+            const cashFolder = cheats.addFolder({ title: "Cash (Spec Ops / Zombies)", expanded: true });
+            cashFolder.addBinding(this.toolParams, "cheatSetCash", {
+                label: "Cash",
+                min: 0,
+                max: SpecOpsCashCap,
+                step: 100,
+            });
+            const setCashBtn = cashFolder.addButton({ title: "Set cash" });
+            setCashBtn.on("click", () => {
+                this.sendCheatSetCash = true;
+                this.sendMsg = true;
+                this.config.set("debugTools", this.toolParams);
+            });
+            for (const amount of [1000, 5000, 10000]) {
+                const addBtn = cashFolder.addButton({ title: `+${amount.toLocaleString("en-US")}` });
+                addBtn.on("click", () => {
+                    this.cheatAddCash = amount;
+                    this.sendMsg = true;
+                });
+            }
+
             // Prevent cheat panel clicks from firing game inputs
             cheats.element.querySelectorAll<HTMLElement>("input, button").forEach((el) => {
                 el.addEventListener("click", () => el.blur());
@@ -681,6 +707,12 @@ export class Editor {
         if (this.sendCheatWave) {
             msg.setWave = Math.max(1, Math.min(90, this.toolParams.cheatSetWave || 1));
         }
+        if (this.sendCheatSetCash) {
+            msg.setCash = Math.max(0, Math.min(SpecOpsCashCap, Math.floor(this.toolParams.cheatSetCash || 0)));
+        }
+        if (this.cheatAddCash > 0) {
+            msg.addCash = this.cheatAddCash;
+        }
 
         return msg;
     }
@@ -704,6 +736,8 @@ export class Editor {
         this.sendCheatGive = false;
         this.sendCheatHealth = false;
         this.sendCheatWave = false;
+        this.sendCheatSetCash = false;
+        this.cheatAddCash = 0;
 
         this.sendMsg = false;
     }

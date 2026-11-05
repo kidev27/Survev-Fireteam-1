@@ -47,6 +47,7 @@ export const debugToolsConfig = {
     cheatGiveCount: 1,
     cheatSetHealth: 100,
     cheatSetWave: 1,
+    cheatSetCash: 10000,
 };
 
 export const debugRenderConfig = {

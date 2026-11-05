@@ -1,5 +1,6 @@
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
+import { packAPunchType, ZombiePackAPunchColors, ZombiePackAPunchNames } from "../maps/zombiePackAPunch.ts";
 
 export interface GunDef {
     readonly type: "gun";
@@ -35,6 +36,8 @@ export interface GunDef {
         borderTint: number;
         /** Optional HUD/inventory icon (svg in img/loot) used instead of `sprite`. */
         uiSprite?: string;
+        /** Legendary loot: a rainbow ring sprite that slowly orbits behind the icon (client only). */
+        legendaryRing?: string;
         scale: number;
         innerScale?: number;
         rot?: number;
@@ -73,6 +76,8 @@ export interface GunDef {
         shootLast?: string;
         shootTeam?: Record<string, string>;
         shootAlt?: string;
+        /** Extra sound layered on every shot (Pack-a-Punch energy zap). */
+        shootLayer?: string;
         fallOff?: number;
         reloadAlt?: string;
     };
@@ -87,6 +92,8 @@ export interface GunDef {
     wonderWeapon?: boolean;
     /** Skip ejected shell casings (energy weapons). */
     noCasing?: boolean;
+    /** Zombies Pack-a-Punch upgraded gun (generated `<gun>_pap` type). */
+    zombieUpgraded?: boolean;
     burstDelay?: number;
     burstCount?: number;
     dualWieldType?: string;
@@ -3147,8 +3154,9 @@ export const BaseDefs: Record<string, GunDef> = {
             sprite: "loot-weapon-raygun.img",
             uiSprite: "loot-weapon-raygun-icon.img",
             tint: 0xffffff,
-            border: "loot-circle-outer-glow.img",
-            borderTint: 0x7dff6b,
+            border: "loot-circle-legendary-base.img",
+            borderTint: 0xffffff,
+            legendaryRing: "loot-circle-legendary-ring.img",
             scale: 0.3,
         },
         worldImg: {
@@ -3734,3 +3742,24 @@ const SkinDefs: Record<string, GunDef> = {
 };
 
 export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
+
+// Zombies Pack-a-Punch: an upgraded twin for every gun in ZombiePackAPunchNames
+// (names live in shared/defs/maps/zombiePackAPunch.ts). Damage and magazine
+// bonuses are applied in WeaponManager from the `zombieUpgraded` flag.
+for (const [base, name] of Object.entries(ZombiePackAPunchNames)) {
+    const def = GunDefs[base];
+    if (!def) throw new Error(`Pack-a-Punch: unknown gun ${base}`);
+    const upgraded: GunDef = util.mergeDeep({}, def, {
+        name,
+        quality: 1,
+        zombieUpgraded: true,
+        lootImg: {
+            border: "loot-circle-outer-glow.img",
+            borderTint: ZombiePackAPunchColors.glow,
+        },
+        sound: { shootLayer: "pap_shot_layer_01" },
+    });
+    // A Mark II pistol must not merge with a normal pistol into a dual-wield pair.
+    delete upgraded.dualWieldType;
+    GunDefs[packAPunchType(base)] = upgraded;
+}

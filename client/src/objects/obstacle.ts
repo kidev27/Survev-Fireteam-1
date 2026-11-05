@@ -1,5 +1,6 @@
 import * as PIXI from "pixi.js-legacy";
 
+import { ZombiePackAPunchType } from "../../../shared/defs/maps/zombiePackAPunch.ts";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
 import type { ObjectData, ObjectType } from "../../../shared/net/objectSerializeFns.ts";
 import type { Collider } from "../../../shared/utils/coldet.ts";
@@ -94,6 +95,11 @@ export class Obstacle implements AbstractObject {
         couldUse: boolean;
     };
 
+    /** Spinning overlay for `def.buttonFx` (Pack-a-Punch gear ring). */
+    fxSprite: ObstacleSprite | null = null;
+    fxRot = 0;
+    fxRingTicker = 0;
+
     imgScale!: number;
     explodeParticle!: string | string[];
     skinPlayerId!: number;
@@ -123,6 +129,10 @@ export class Obstacle implements AbstractObject {
         if (this.door?.casingSprite) {
             this.door.casingSprite.destroy();
             this.door.casingSprite = null;
+        }
+        if (this.fxSprite) {
+            this.fxSprite.destroy();
+            this.fxSprite = null;
         }
         if (this.smokeEmitter) {
             this.smokeEmitter.stop();
@@ -223,6 +233,18 @@ export class Obstacle implements AbstractObject {
                     isVat: def.button.isVat,
                 };
             }
+            const fxDef = def.buttonFx;
+            if (fxDef && !this.fxSprite) {
+                const sprite = new PIXI.Sprite() as ObstacleSprite;
+                sprite.texture = PIXI.Texture.from(fxDef.spinSprite);
+                sprite.anchor.set(0.5, 0.5);
+                sprite.posOffset = v2.copy(fxDef.offset);
+                sprite.imgScale = fxDef.spinScale;
+                sprite.visible = true;
+                this.fxSprite = sprite;
+                this.fxRot = 0;
+                this.fxRingTicker = 0;
+            }
             this.isPuzzlePiece = data.isPuzzlePiece;
             this.parentBuildingId = this.isPuzzlePiece ? data.parentBuildingId! : 0;
 
@@ -312,6 +334,13 @@ export class Obstacle implements AbstractObject {
                 return null;
             }
 
+            if (this.type === ZombiePackAPunchType && this.button.onOff) {
+                return {
+                    rad: this.button.interactionRad,
+                    action: "game-take",
+                    object: "game-zombie_pack_a_punch_reward",
+                };
+            }
             if (this.type === "zombie_mystery_box" && this.button.onOff) {
                 return {
                     rad: this.button.interactionRad,
@@ -373,6 +402,23 @@ export class Obstacle implements AbstractObject {
                 }
             }
             button.seqOld = button.seq;
+
+            const fxDef = this.fxSprite
+                ? MapObjectDefs.typeToDef(this.type, "obstacle").buttonFx
+                : undefined;
+            if (fxDef && button.onOff && !this.dead) {
+                this.fxRot += fxDef.spinSpeed * dt;
+                this.fxRingTicker -= dt;
+                if (this.fxRingTicker <= 0) {
+                    this.fxRingTicker = fxDef.ringInterval;
+                    particleBarn.addParticle(
+                        fxDef.ringParticle,
+                        this.layer,
+                        v2.add(this.pos, fxDef.offset),
+                        v2.create(0, 0),
+                    );
+                }
+            }
         }
 
         // Door
@@ -506,6 +552,9 @@ export class Obstacle implements AbstractObject {
             if (this.isDoor && this.door.casingSprite) {
                 renderer.addPIXIObj(this.door.casingSprite, layer, zOrd + 1, zIdx);
             }
+            if (this.fxSprite) {
+                renderer.addPIXIObj(this.fxSprite, layer, zOrd, zIdx + 1);
+            }
         }
         this.isNew = false;
     }
@@ -544,6 +593,15 @@ export class Obstacle implements AbstractObject {
             this.door.casingSprite.scale.set(casingScale, casingScale);
             this.door.casingSprite.rotation = -rot;
             this.door.casingSprite.visible = !this.dead;
+        }
+
+        if (this.fxSprite) {
+            const fxPos = camera.m_pointToScreen(v2.add(pos, this.fxSprite.posOffset));
+            const fxScale = camera.m_pixels(scale * this.fxSprite.imgScale);
+            this.fxSprite.position.set(fxPos.x, fxPos.y);
+            this.fxSprite.scale.set(fxScale, fxScale);
+            this.fxSprite.rotation = this.fxRot;
+            this.fxSprite.visible = !this.dead && this.sprite.visible;
         }
 
         if (IS_DEV && debug.obstacles && util.sameLayer(layer, this.layer)) {

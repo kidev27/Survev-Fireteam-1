@@ -368,6 +368,22 @@ test("EditMsg roundtrip pacifist flag without spawn", () => {
     expect(outMsg.npcIgnoreOperators).toBe(true);
 });
 
+test("EditMsg roundtrip cash cheat fields", () => {
+    for (const [setCash, addCash] of [[-1, 0], [0, 0], [25000, 0], [-1, 5000]]) {
+        const inMsg = new net.EditMsg();
+        inMsg.setCash = setCash;
+        inMsg.addCash = addCash;
+        stream.serializeMsg(net.MsgType.Edit, inMsg);
+        stream.stream.index = 0;
+        expect(stream.deserializeMsgType()).toBe(net.MsgType.Edit);
+        const outMsg = new net.EditMsg();
+        outMsg.deserialize(stream.getStream());
+        expect(outMsg.setCash).toBe(setCash);
+        expect(outMsg.addCash).toBe(addCash);
+        stream.stream.index = 0;
+    }
+});
+
 test("PerkModeRoleSelectMsg serializes Spec Ops unequip SKUs", () => {
     const msg = new PerkModeRoleSelectMsg();
     msg.role = "specops_unequip_ap_rounds";

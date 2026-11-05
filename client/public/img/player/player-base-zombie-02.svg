@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+<defs><clipPath id="zb1"><circle cx="70" cy="70" r="66.5"/></clipPath></defs>
+<circle cx="70" cy="70" r="66.5" fill="#b6b98a"/>
+<g clip-path="url(#zb1)">
+<circle cx="40" cy="108" r="9" fill="#a1a576"/>
+<circle cx="110" cy="96" r="7" fill="#a9ad7d"/>
+<circle cx="104" cy="30" r="8" fill="#a1a576"/>
+<circle cx="46" cy="22" r="5" fill="#a9ad7d"/>
+<circle cx="124" cy="70" r="5" fill="#a1a576"/>
+<path d="M0 40 Q12 34 18 44 Q28 46 24 58 Q30 66 22 74 Q26 86 14 90 Q8 98 0 96 Z" fill="#646454"/>
+<path d="M0 40 Q12 34 18 44 Q28 46 24 58 Q30 66 22 74 Q26 86 14 90 Q8 98 0 96" fill="none" stroke="#4f4b3d" stroke-width="3" stroke-linejoin="round"/>
+<path d="M80 0 L128 0 L128 22 Q118 26 112 20 Q104 30 94 24 Q86 22 82 14 Z" fill="#646454"/>
+<path d="M128 22 Q118 26 112 20 Q104 30 94 24 Q86 22 82 14" fill="none" stroke="#4f4b3d" stroke-width="3" stroke-linejoin="round"/>
+<path d="M14 116 Q24 112 28 122 Q36 124 34 134 L40 140 L10 140 Z" fill="#646454"/>
+<path d="M14 116 Q24 112 28 122 Q36 124 34 134" fill="none" stroke="#4f4b3d" stroke-width="3" stroke-linejoin="round"/>
+</g>
+<circle cx="72" cy="70" r="35" fill="#bec193" stroke="#4f4c3d" stroke-width="5"/>
+<circle cx="64" cy="84" r="4" fill="#a9ad7d"/>
+<circle cx="84" cy="56" r="3" fill="#a9ad7d"/>
+<circle cx="56" cy="66" r="2.5" fill="#a9ad7d"/>
+<path d="M78 80 q6 -5 11 0 q3 5 -1 8 q-5 4 -9 0 q-4 -4 -1 -8z" fill="#8e1c1c"/>
+<path d="M60 58 q4.199999999999999 -3.5 7.699999999999999 0 q2.0999999999999996 3.5 -0.7 5.6 q-3.5 2.8 -6.3 0 q-2.8 -2.8 -0.7 -5.6z" fill="#9b2222"/>
+<circle cx="92" cy="86" r="2" fill="#8e1c1c"/>
+<circle cx="70" cy="92" r="1.5" fill="#9b2222"/>
+<circle cx="30" cy="30" r="3" fill="#8e1c1c"/>
+<circle cx="116" cy="108" r="2.6" fill="#8e1c1c"/>
+<circle cx="38" cy="124" r="1.8" fill="#9b2222"/>
+<circle cx="70" cy="70" r="66.8" fill="none" stroke="#2b2a22" stroke-width="6.4"/>
+</svg>

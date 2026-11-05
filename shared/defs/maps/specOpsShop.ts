@@ -3,6 +3,7 @@ import type { Collider } from "../../utils/coldet.ts";
 import { collider } from "../../utils/collider.ts";
 import { v2, type Vec2 } from "../../utils/v2.ts";
 import { GunDefs } from "../gameObjects/gunDefs.ts";
+import { packAPunchBaseType } from "./zombiePackAPunch.ts";
 
 export type SpecOpsStation = "weapon" | "gear" | "armor" | "support" | "perk";
 
@@ -206,7 +207,8 @@ export function specOpsWeaponAmmoStats(
     base: { maxClip: number; maxReload: number; maxReloadAlt?: number },
     extended = false,
 ): typeof base {
-    const mod = SpecOpsWeaponMods[gunType];
+    // Pack-a-Punch twins share the original gun's Spec Ops tuning.
+    const mod = SpecOpsWeaponMods[packAPunchBaseType(gunType)];
     if (!mod) return base;
     return {
         maxClip: extended
@@ -220,7 +222,7 @@ export function specOpsWeaponAmmoStats(
 }
 
 export function specOpsWeaponReloadTime(gunType: string, reloadTime: number): number {
-    const mod = SpecOpsWeaponMods[gunType];
+    const mod = SpecOpsWeaponMods[packAPunchBaseType(gunType)];
     return reloadTime * SpecOpsReloadMult * (mod?.reloadMult ?? 1);
 }
 
@@ -790,11 +792,11 @@ function specOpsDefaultWeaponCost(sku: string): number {
 const SpecOpsWeaponShopItems: SpecOpsShopItem[] = Object.keys(GunDefs)
     .filter((sku) => {
         const def = GunDefs[sku as keyof typeof GunDefs] as
-            | { noDrop?: boolean; wonderWeapon?: boolean }
+            | { noDrop?: boolean; wonderWeapon?: boolean; zombieUpgraded?: boolean }
             | undefined;
         // Undroppable guns (bugle, m9_cursed) stay find/role-only — not sold.
-        // Wonder weapons (Ray Gun) are mystery-box only.
-        return !def?.noDrop && !def?.wonderWeapon;
+        // Wonder weapons (Ray Gun) are mystery-box only; Mark II guns are Pack-a-Punch only.
+        return !def?.noDrop && !def?.wonderWeapon && !def?.zombieUpgraded;
     })
     .sort((a, b) => a.localeCompare(b))
     .map((sku) => ({

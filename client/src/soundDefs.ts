@@ -157,6 +157,12 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             maxInstances: 5,
         },
+        // Pack-a-Punch Mark II guns: energy zap layered over the normal shot.
+        pap_shot_layer_01: {
+            path: "audio/guns/pap_shot_layer_01.mp3",
+            volume: 1,
+            maxInstances: 8,
+        },
         deagle_reload_01: {
             path: "audio/guns/deagle_reload_01.mp3",
             volume: 1,
@@ -1362,6 +1368,11 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         explosion_05: {
             path: "audio/sfx/explosion_05.mp3",
+            volume: 1,
+        },
+        // Mystery Box lands on a wonder weapon (Ray Gun).
+        legendary_reveal_01: {
+            path: "audio/sfx/legendary_reveal_01.mp3",
             volume: 1,
         },
         //ray gun explosion

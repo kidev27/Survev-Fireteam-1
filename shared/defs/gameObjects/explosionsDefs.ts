@@ -111,6 +111,17 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
         explosionEffectType: "raygun",
         decalType: "",
     },
+    // Visual only: the Mystery Box landing on a wonder weapon (no damage pass is run).
+    explosion_legendary_reveal: {
+        type: "explosion",
+        damage: 0,
+        obstacleDamage: 0,
+        rad: { min: 0, max: 0 },
+        shrapnelCount: 0,
+        shrapnelType: "shrapnel_usas",
+        explosionEffectType: "legendaryReveal",
+        decalType: "",
+    },
     explosion_rounds_sg: {
         type: "explosion",
         damage: 3,
