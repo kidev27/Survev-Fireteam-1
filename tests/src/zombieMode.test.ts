@@ -887,13 +887,16 @@ test("Ray Gun: wonder weapon def, 50AE, box-only (never in the shop)", () => {
     expect(ZombieMysteryBoxWeapons).not.toContain(ZombieRayGun.type);
 });
 
-test("Ray Gun: 2% box odds, other 22 guns share the rest", () => {
+test("Ray Gun: box odds follow ZombieRayGun.boxChance, other 22 guns share the rest", () => {
     const { ops, a } = rayGunGame(TeamMode.Solo);
+    const chance = ZombieRayGun.boxChance;
+    expect(chance).toBeGreaterThan(0);
+    expect(chance).toBeLessThan(1);
     expect(ZombieMysteryBoxWeapons).toHaveLength(22);
     expect(ops.rollMysteryBoxResult(a, 0)).toBe(ZombieRayGun.type);
-    expect(ops.rollMysteryBoxResult(a, 0.0199)).toBe(ZombieRayGun.type);
+    expect(ops.rollMysteryBoxResult(a, chance * 0.99)).toBe(ZombieRayGun.type);
     for (let i = 0; i < 50; i++) {
-        const result = ops.rollMysteryBoxResult(a, 0.02 + (i / 50) * 0.98);
+        const result = ops.rollMysteryBoxResult(a, chance + (i / 50) * (1 - chance));
         expect(ZombieMysteryBoxWeapons).toContain(result);
     }
     let hits = 0;
@@ -901,8 +904,9 @@ test("Ray Gun: 2% box odds, other 22 guns share the rest", () => {
     for (let i = 0; i < rolls; i++) {
         if (ops.rollMysteryBoxResult(a) === ZombieRayGun.type) hits++;
     }
-    expect(hits / rolls).toBeGreaterThan(0.012);
-    expect(hits / rolls).toBeLessThan(0.028);
+    // Within ~5 standard deviations of the configured chance.
+    const sd = Math.sqrt((chance * (1 - chance)) / rolls);
+    expect(Math.abs(hits / rolls - chance)).toBeLessThan(5 * sd);
 });
 
 test("Ray Gun: holding one or leaving a dropped one on the floor blocks rolling it; teammates roll their own", () => {
