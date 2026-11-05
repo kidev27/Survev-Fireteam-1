@@ -5811,6 +5811,8 @@ export class SpecOpsManager implements PracticeHost {
             this.practice = new PracticeController(this);
             this.contractsEnabled = false;
         }
+        // Zombies has no contracts (no Most Wanted, hold zones, or weapon-cash jobs).
+        if (this.zombieMode) this.contractsEnabled = false;
     }
 
     /** Zombie Survival reuses the proven round/shop/nav engine with a separate roster. */
@@ -7997,7 +7999,14 @@ export class SpecOpsManager implements PracticeHost {
         squadSize: number,
         approachAngle: number,
         host?: Player,
+        allowNonZombie = false,
     ): Player | undefined {
+        // Zombies only ever spawns zombies. Blocks every Spec Ops soldier/boss path
+        // (contracts, glory events, debug spawns, future callers) in one place.
+        if (this.zombieMode && !isZombieClass(kind) && !allowNonZombie) {
+            this.game.logger.warn(`Zombies: refused to spawn non-zombie enemy ${kind}`);
+            return undefined;
+        }
         const humans = this.livingHumans();
         const origin = host?.pos
             ?? (humans.length
@@ -8106,6 +8115,8 @@ export class SpecOpsManager implements PracticeHost {
      * Cap is SpecOpsIroncladPerPlayer × living operators for the current wave.
      */
     onHumanStrobeThrown(player: Player, at: Vec2): void {
+        // Zombies is zombies only: strobes still call airstrikes, but never summon Ironclads.
+        if (this.zombieMode) return;
         if (player.specOpsAi) return;
         if (this.wave < SpecOpsIroncladWave) return;
         const humans = Math.max(1, this.livingHumans().length);
@@ -9208,9 +9219,10 @@ export class SpecOpsManager implements PracticeHost {
         return "rifle";
     }
 
-    spawnEnemyPublic(kind: EnemyClass): Player {
+    /** `allowNonZombie` is for tests only: Zombies otherwise refuses non-zombie enemies. */
+    spawnEnemyPublic(kind: EnemyClass, allowNonZombie = false): Player {
         const host = this.livingHumans()[0];
-        const player = this.spawnEnemy(kind, 0, 1, util.random(0, Math.PI * 2), host);
+        const player = this.spawnEnemy(kind, 0, 1, util.random(0, Math.PI * 2), host, allowNonZombie);
         if (!player) {
             throw new Error(`Spec Ops failed to spawn ${kind}`);
         }

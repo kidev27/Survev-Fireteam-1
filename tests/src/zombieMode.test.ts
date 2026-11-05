@@ -93,7 +93,7 @@ test("Insta-Kill one-shots walkers, doubles elite damage, and expires for the te
     game.specOps!.startNextWave();
     game.specOps!.drainWaveSpawnQueuePublic();
     const walker = game.specOps!.livingEnemies()[0];
-    const elite = game.specOps!.spawnEnemyPublic("juggernaut")!;
+    const elite = game.specOps!.spawnEnemyPublic("juggernaut", true)!;
 
     game.specOps!.activateZombiePowerUp("zombie_powerup_insta_kill");
     game.specOps!.setNpcIgnoreOperators(true);
@@ -145,7 +145,7 @@ test("Nuke removes ordinary zombies and takes 35% of an elite's current health",
     game.specOps!.startNextWave();
     game.specOps!.drainWaveSpawnQueuePublic();
     const walkers = [...game.specOps!.livingEnemies()];
-    const elite = game.specOps!.spawnEnemyPublic("juggernaut")!;
+    const elite = game.specOps!.spawnEnemyPublic("juggernaut", true)!;
     const eliteHealth = elite.health;
 
     game.specOps!.activateZombiePowerUp("zombie_powerup_nuke");
@@ -954,4 +954,47 @@ test("Ray Gun bolt: 180 direct hit, splash on neighbours, no full explosion pass
     expect(n0 - neighbour.health).toBeLessThanOrEqual(90.5);
     expect(game.explosionBarn.explosions).toHaveLength(0);
     expect(game.explosionBarn.newExplosions.some((e) => e.type === "explosion_raygun")).toBe(true);
+});
+
+test("Zombies has no contracts (no Most Wanted)", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    expect(ops.zombieMode).toBe(true);
+    expect(ops.contractsEnabled).toBe(false);
+});
+
+test("Zombies only ever spawns zombies: no soldiers, bosses, or Ironclads", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+
+    // Non-zombie classes are refused; zombies still spawn.
+    expect(() => ops.spawnEnemyPublic("warlord")).toThrow();
+    expect(() => ops.spawnEnemyPublic("rifle")).toThrow();
+    expect(ops.spawnEnemyPublic("zombie_walker").name).toBe("Zombie");
+
+    // Late-round IR strobes call airstrikes but never summon Ironclads.
+    ops.wave = 30;
+    const before = ops.livingEnemies().length;
+    ops.onHumanStrobeThrown(operator, v2.copy(operator.pos));
+    expect(ops.livingEnemies().length).toBe(before);
+
+    // Boss (10/30), mini-boss (7), vest (5/10) and Ironclad-era rounds are plain zombie rounds.
+    for (const wave of [7, 10, 30]) {
+        ops.wave = wave - 1;
+        ops.startNextWave();
+        ops.drainWaveSpawnQueuePublic();
+    }
+    const enemies = ops.livingEnemies();
+    expect(enemies.length).toBeGreaterThan(0);
+    for (const enemy of enemies) {
+        expect(enemy.name).toBe("Zombie");
+        expect(enemy.weapons[GameConfig.WeaponSlot.Primary].type).toBe("");
+        expect(enemy.weapons[GameConfig.WeaponSlot.Secondary].type).toBe("");
+        expect(enemy.specOpsStrobeTank).toBe(false);
+        expect(enemy.specOpsSuicideVest).toBe(false);
+    }
 });

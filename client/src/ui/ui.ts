@@ -2809,31 +2809,34 @@ export class UiManager {
                 this.lastSpecOpsWave = wave;
                 this.lastSpecOpsStation = undefined;
                 let msg = `${this.localization.translate("game-specops-wave")} ${wave}`;
-                if (wave === 29) {
-                    msg += ` — ${this.localization.translate("game-specops-glory-horde")}`;
-                }
-                if (wave === 31) {
-                    msg += ` — ${this.localization.translate("game-specops-veteran-forces")}`;
-                }
-                if (wave % 10 === 0) {
-                    if (wave === 30) {
-                        msg += ` — ${this.localization.translate("game-specops-glory-truce")}`;
-                    } else if (wave > 30) {
-                        msg += ` — ${this.localization.translate("game-specops-cobalt-boss-warn")}`;
-                    } else {
-                        msg += ` — ${this.localization.translate("game-specops-boss-warn")}`;
+                // Zombies is zombies only: no boss, mini-boss, glory, veteran or vest warnings.
+                if (!gameMode.zombieMode) {
+                    if (wave === 29) {
+                        msg += ` — ${this.localization.translate("game-specops-glory-horde")}`;
                     }
-                    const eventBoss = specOpsEventBossForWave(wave);
-                    if (eventBoss) {
-                        const key = `game-specops-event-${eventBoss}`;
-                        const label = this.localization.translate(key) || eventBoss;
-                        msg += ` — ${label}`;
+                    if (wave === 31) {
+                        msg += ` — ${this.localization.translate("game-specops-veteran-forces")}`;
                     }
-                } else if (wave % 7 === 0) {
-                    msg += ` — ${this.localization.translate("game-specops-miniboss-warn")}`;
-                }
-                if (wave % 5 === 0) {
-                    msg += ` — ${this.localization.translate("game-specops-vest-warn")}`;
+                    if (wave % 10 === 0) {
+                        if (wave === 30) {
+                            msg += ` — ${this.localization.translate("game-specops-glory-truce")}`;
+                        } else if (wave > 30) {
+                            msg += ` — ${this.localization.translate("game-specops-cobalt-boss-warn")}`;
+                        } else {
+                            msg += ` — ${this.localization.translate("game-specops-boss-warn")}`;
+                        }
+                        const eventBoss = specOpsEventBossForWave(wave);
+                        if (eventBoss) {
+                            const key = `game-specops-event-${eventBoss}`;
+                            const label = this.localization.translate(key) || eventBoss;
+                            msg += ` — ${label}`;
+                        }
+                    } else if (wave % 7 === 0) {
+                        msg += ` — ${this.localization.translate("game-specops-miniboss-warn")}`;
+                    }
+                    if (wave % 5 === 0) {
+                        msg += ` — ${this.localization.translate("game-specops-vest-warn")}`;
+                    }
                 }
                 if (wave === SpecOpsStationUnlockWave.gear) {
                     msg += ` — ${this.localization.translate("game-specops-unlock-gear")}`;
