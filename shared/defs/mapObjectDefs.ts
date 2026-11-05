@@ -36217,24 +36217,6 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     // Last Call's freight gate, pool-free courtyard and garage cars (see lastCallObjectDefs.ts).
     zombie_power_gate: lastCallPowerGateDef(),
     zombie_garage_car: lastCallCarDef(),
-    zombie_upgrade_bench: createCrate({
-        destructible: false,
-        health: 9999,
-        loot: [],
-        collision: collider.createAabbExtents(v2.create(0, 0), v2.create(3.2, 1.5)),
-        img: { sprite: "map-crate-mil-03.img", tint: 0xff4fa3 },
-        map: { display: true, color: 0xf72585, scale: 1.25 },
-        button: {
-            interactionRad: 2.5,
-            interactionText: "game-use",
-            useOnce: false,
-            useType: "",
-            useDelay: 0,
-            useDir: v2.create(0, -1),
-            useImg: "map-crate-mil-03.img",
-            sound: { on: "button_press_01", off: "button_press_01" },
-        },
-    }),
     // Rolling shutters you pay to open (Last Call doorways are 6 units wide).
     zombie_buy_gate_750: lastCallShutterDef(),
     zombie_buy_gate_1000: lastCallShutterDef(),

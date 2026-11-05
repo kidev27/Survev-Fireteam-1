@@ -1,6 +1,7 @@
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { GameConfig } from "../../../shared/gameConfig.ts";
 import type { Bullet } from "../../../shared/net/updateMsg.ts";
+import { util } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { AudioManager } from "../audioManager.ts";
 import type { ParticleBarn } from "./particles.ts";
@@ -148,6 +149,21 @@ export class ShotBarn {
                         detune,
                         volumeScale: shot.splinter ? 0.75 : 1,
                     });
+
+                    // Pack-a-Punch Mark II guns layer an energy zap over the normal shot.
+                    if (weaponDef.sound.shootLayer) {
+                        audioManager.playSound(weaponDef.sound.shootLayer, {
+                            channel: shot.playerId == activePlayerId
+                                ? "activePlayer"
+                                : "otherPlayers",
+                            soundPos: shot.pos,
+                            layer: player ? player.layer : shot.layer,
+                            filter: "muffled",
+                            fallOff: weaponDef.sound.fallOff ? weaponDef.sound.fallOff : 0,
+                            detune: util.random(-60, 60),
+                            volumeScale: 0.55,
+                        });
+                    }
 
                     if (shot.splinter) {
                         audioManager.playSound(shotSound, {

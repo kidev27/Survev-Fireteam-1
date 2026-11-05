@@ -487,9 +487,7 @@ export class WeaponManager {
                 stats,
                 this.player.hasPerk("firepower"),
             );
-            const upgradeMult = this.player.specOpsUpgradedWeapons.has(gunType)
-                ? ZombieUpgradeMagazineMult
-                : 1;
+            const upgradeMult = weaponDef.zombieUpgraded ? ZombieUpgradeMagazineMult : 1;
             return {
                 maxClip: Math.ceil(modded.maxClip * upgradeMult),
                 maxReload: Math.ceil(modded.maxReload * upgradeMult),
@@ -1014,7 +1012,7 @@ export class WeaponManager {
         if (this.player.specOpsAi && this.player.specOpsDamageMult !== 1) {
             damageMult *= this.player.specOpsDamageMult;
         }
-        if (this.player.specOpsUpgradedWeapons.has(this.activeWeapon)) {
+        if (itemDef.zombieUpgraded) {
             damageMult *= ZombieUpgradeDamageMult;
         }
 

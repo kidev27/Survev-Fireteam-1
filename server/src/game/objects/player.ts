@@ -1478,8 +1478,6 @@ export class Player extends BaseGameObject {
     specOpsSpeedMult = 1;
     /** Enemy bullet damage scale; humans / allies stay at 1. */
     specOpsDamageMult = 1;
-    /** Gun definitions upgraded at Last Call's powered workbench. */
-    readonly specOpsUpgradedWeapons = new Set<string>();
     /** Seconds remaining before Spec Ops out-of-combat regen starts. */
     specOpsCombatTimer = 0;
     specOpsKind: "" | "enemy" | "ally" | "sentry" = "";

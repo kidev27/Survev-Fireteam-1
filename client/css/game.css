@@ -3665,6 +3665,21 @@ body:not(.ui-specops-mode) #ui-loot-armor_plate {
   background-repeat: no-repeat;
 }
 
+/* Zombies Pack-a-Punch: Mark II guns glow purple/cyan in the weapon slots. */
+.ui-weapon-image.ui-weapon-pap {
+  animation: ui-weapon-pap-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes ui-weapon-pap-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #9b6bff) drop-shadow(0 0 6px rgba(155, 107, 255, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px #4fe3ff) drop-shadow(0 0 9px rgba(79, 227, 255, 0.7));
+  }
+}
+
 #ui-weapon-id-4 .ui-weapon-image {
   height: 52px;
   width: 52px;

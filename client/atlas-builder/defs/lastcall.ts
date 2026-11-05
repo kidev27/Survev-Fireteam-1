@@ -15,5 +15,8 @@ export const LastCallAtlas: AtlasDef = {
         "map/map-zombie-perk-quick-revive.png",
         "map/map-zombie-perk-stamin-up.png",
         "map/map-zombie-perk-double-tap.png",
+        "map/map-zombie-pap.svg",
+        "map/map-zombie-pap-on.svg",
+        "map/map-zombie-pap-gear.svg",
     ],
 };

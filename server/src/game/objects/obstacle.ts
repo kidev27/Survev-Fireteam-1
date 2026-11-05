@@ -1,3 +1,4 @@
+import { ZombiePackAPunchType } from "../../../../shared/defs/maps/zombiePackAPunch.ts";
 import { zombiePerkMachine } from "../../../../shared/defs/maps/zombiePerks.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../../../shared/defs/register.ts";
 import { DamageType, GameConfig } from "../../../../shared/gameConfig.ts";
@@ -716,7 +717,7 @@ export class Obstacle extends BaseGameObject {
             return;
         }
 
-        if (player && !auto && this.type === "zombie_upgrade_bench") {
+        if (player && !auto && this.type === ZombiePackAPunchType) {
             this.game.specOps?.tryUpgradeZombieWeapon(player, this);
             return;
         }

@@ -1,5 +1,6 @@
 import $ from "jquery";
 import { device } from "../device.ts";
+import { packAPunchBaseType, ZombiePackAPunchNames } from "../../../shared/defs/maps/zombiePackAPunch.ts";
 import english from "../en.json";
 
 export function downloadFile(
@@ -36,6 +37,14 @@ const Locales = {
 };
 
 export type Locale = keyof typeof Locales;
+
+/** "game-ak47_pap" -> "AK-47 Mark II" (names live in shared/defs/maps/zombiePackAPunch.ts). */
+function packAPunchTranslation(key: string): string {
+    if (!key.startsWith("game-")) return "";
+    const type = key.slice("game-".length);
+    const base = packAPunchBaseType(type);
+    return base !== type ? ZombiePackAPunchNames[base] : "";
+}
 
 export class Localization {
     constructor(
@@ -80,6 +89,7 @@ export class Localization {
             this.translations[this.locale]?.[key]
             || this.translations[this.locale]?.[spacedKey]
             || this.translations["en"][key]
+            || packAPunchTranslation(key)
             || ""
         );
     }

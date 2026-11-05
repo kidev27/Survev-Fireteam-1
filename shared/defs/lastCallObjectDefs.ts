@@ -21,6 +21,11 @@ import {
     type LastCallZoneId,
     LastCallZones,
 } from "./maps/lastCallLayout.ts";
+import {
+    packAPunchArtOffset,
+    ZombiePackAPunchSprite,
+    ZombiePackAPunchType,
+} from "./maps/zombiePackAPunch.ts";
 import { type ZombiePerkMachineType, ZombiePerkMachineTypes } from "./maps/zombiePerks.ts";
 
 /**
@@ -218,7 +223,7 @@ function buildingMapObjects(): BuildingDef["mapObjects"] {
     add("zombie_mystery_box", at(LastCallBoxSpots[0].pos));
     for (const spot of LastCallBoxSpots) add("zombie_mystery_box_spot", at(spot.pos));
     add("zombie_power_switch", at(LastCallPowerSwitchPos));
-    add("zombie_upgrade_bench", at(LastCallBenchPos));
+    add(ZombiePackAPunchType, at(LastCallBenchPos));
     return objs;
 }
 
@@ -329,6 +334,39 @@ function lastCallDefs(): Record<string, MapObjectDef> {
             sound: { on: "perk_pickup_01", off: "perk_pickup_01" },
         },
     });
+    // Pack-a-Punch: ~1.4x a perk machine's height, as in the approved concept. Idle / working sprites swap on the button;
+    // the gear ring is a separate sprite that spins while it works.
+    const core = packAPunchArtOffset(ZombiePackAPunchSprite.core);
+    defs[ZombiePackAPunchType] = {
+        ...lastCallSolidBlock({
+            extents: v2.create(4.1, 1.8),
+            height: 1,
+            sprite: "map-zombie-pap.img",
+            spriteScale: ZombiePackAPunchSprite.spriteScale,
+            metal: true,
+            zIdx: 10,
+        }),
+        map: { display: true, color: 0x4f9fa0, scale: 1.25 },
+        button: {
+            interactionRad: 2.8,
+            interactionText: "game-use",
+            useOnce: false,
+            useType: "",
+            useDelay: 0,
+            useDir: v2.create(0, -1),
+            useImg: "map-zombie-pap-on.img",
+            sound: { on: "perk_pickup_01", off: "airdrop_open_01" },
+        },
+        buttonFx: {
+            spinSprite: "map-zombie-pap-gear.img",
+            spinScale: ZombiePackAPunchSprite.spriteScale,
+            offset: v2.create(core.x, core.y),
+            spinSpeed: Math.PI * 1.6,
+            ringParticle: "papRing",
+            ringInterval: 0.28,
+        },
+    };
+
     defs.zombie_perk_machine_juggernog = perkMachine("map-zombie-perk-juggernog.img", 0xb52b32);
     defs.zombie_perk_machine_speed_cola = perkMachine("map-zombie-perk-speed-cola.img", 0x2c5d91);
     defs.zombie_perk_machine_quick_revive = perkMachine("map-zombie-perk-quick-revive.img", 0x55c8d0);

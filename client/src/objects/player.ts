@@ -9,6 +9,7 @@ import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs.ts";
 import type { ThrowableDef } from "../../../shared/defs/gameObjects/throwableDefs.ts";
 import type { ObstacleDef } from "../../../shared/defs/mapObjectsTyping.ts";
 import { SpecOpsMaxArmor, SpecOpsMaxHealth } from "../../../shared/defs/maps/specOpsShop.ts";
+import { ZombiePackAPunchColors } from "../../../shared/defs/maps/zombiePackAPunch.ts";
 import type { ZombiePowerUpTimers } from "../../../shared/defs/maps/zombiePowerUps.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../../shared/defs/register.ts";
 import { Action, Anim, GameConfig, HasteType, Input, WeaponSlot } from "../../../shared/gameConfig.ts";
@@ -106,18 +107,86 @@ function createSprite() {
 const desktopZoomRads = Object.values(GameConfig.scopeZoomRadius.desktop);
 const mobileZoomRads = Object.values(GameConfig.scopeZoomRadius.mobile);
 
+/** Pack-a-Punch camo needs sprite masks (WebGL). The canvas fallback keeps only the glow. */
+let packAPunchCamoEnabled = true;
+export function setPackAPunchCamoEnabled(enabled: boolean) {
+    packAPunchCamoEnabled = enabled;
+}
+
 class Gun {
     gunBarrel = createSprite();
     gunMag = createSprite();
+    /** Pack-a-Punch Mark II look: pulsing glow behind the gun and flowing camo on it. */
+    papGlow = createSprite();
+    papCamo = createSprite();
+    papCamoMask = createSprite();
+    papTime = 0;
+    papCamoBaseY = 0;
+    papCamoRange = 0;
+    upgraded = false;
 
     container = new PIXI.Container();
     magTop = false;
 
     constructor() {
+        this.container.addChild(this.papGlow);
         this.container.addChild(this.gunBarrel);
         this.container.addChild(this.gunMag);
+        this.container.addChild(this.papCamo);
+        this.container.addChild(this.papCamoMask);
+        this.papGlow.blendMode = PIXI.BLEND_MODES.ADD;
+        this.papCamo.mask = this.papCamoMask;
         this.container.rotation = Math.PI * 0.5;
         this.container.visible = false;
+    }
+
+    /** Animate the Pack-a-Punch glow pulse and camo flow (client only). */
+    updateFx(dt: number) {
+        if (!this.upgraded || !this.container.visible) return;
+        this.papTime += dt;
+        this.papGlow.alpha = 0.5 + 0.25 * Math.sin(this.papTime * 3.2);
+        this.papGlow.tint = Math.sin(this.papTime * 1.6) > 0
+            ? ZombiePackAPunchColors.camoA
+            : ZombiePackAPunchColors.camoB;
+        if (this.papCamo.visible) {
+            this.papCamo.y = this.papCamoBaseY + Math.sin(this.papTime * 0.7) * this.papCamoRange;
+        }
+    }
+
+    private setPackAPunch(gunDef: GunDef) {
+        this.upgraded = !!gunDef.zombieUpgraded;
+        const barrel = this.gunBarrel;
+        this.papGlow.visible = this.upgraded;
+        const camo = this.upgraded && packAPunchCamoEnabled;
+        this.papCamo.visible = camo;
+        this.papCamoMask.visible = camo;
+        if (!this.upgraded) return;
+
+        // Glow: the gun's own silhouette, enlarged and added on top of what's behind it.
+        this.papGlow.texture = barrel.texture;
+        this.papGlow.anchor.copyFrom(barrel.anchor);
+        this.papGlow.position.copyFrom(barrel.position);
+        this.papGlow.scale.set(barrel.scale.x * 1.22, barrel.scale.y * 1.06);
+        this.papGlow.tint = ZombiePackAPunchColors.camoA;
+        this.papGlow.alpha = 0.6;
+        if (!camo) return;
+
+        // Camo: a large pattern masked to the gun's shape, sliding along the barrel.
+        this.papCamoMask.texture = barrel.texture;
+        this.papCamoMask.anchor.copyFrom(barrel.anchor);
+        this.papCamoMask.position.copyFrom(barrel.position);
+        this.papCamoMask.scale.copyFrom(barrel.scale);
+        this.papCamo.texture = PIXI.Texture.from("part-pap-camo-01.img");
+        this.papCamo.anchor.set(0.5, 1);
+        this.papCamo.alpha = 0.68;
+        const gunW = Math.abs(barrel.width);
+        const gunH = Math.abs(barrel.height);
+        this.papCamo.width = gunW * 1.6;
+        this.papCamo.height = gunH * 1.6;
+        this.papCamoRange = gunH * 0.25;
+        this.papCamoBaseY = barrel.y + this.papCamoRange;
+        this.papCamo.x = barrel.x;
+        this.papCamo.y = this.papCamoBaseY;
     }
 
     setVisible(vis: boolean) {
@@ -152,6 +221,7 @@ class Gun {
         }
 
         this.magTop = !!(imgDef.magImg?.top);
+        this.setPackAPunch(gunDef);
 
         const handOffset = gunDef.isDual ? v2.create(-5.95, 0) : v2.create(-4.25, -1.75);
         if (imgDef.gunOffset) {
@@ -864,6 +934,8 @@ export class Player implements AbstractObject {
         }
         const curWeapDef = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon);
         const isActivePlayer = this.__id == activeId;
+        this.gunLSprites.updateFx(dt);
+        this.gunRSprites.updateFx(dt);
         const activePlayer = playerBarn.getPlayerById(activeId)!;
         this.m_posOld = v2.copy(this.m_pos);
         this.m_dirOld = v2.copy(this.m_dir);

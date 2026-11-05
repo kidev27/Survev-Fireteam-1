@@ -1283,6 +1283,11 @@ export class UiManager2 {
                 R.image.src = helpers.getSvgFromGameType(L.type);
                 R.image.style.display = j ? "inline" : "none";
                 R.image.style.transform = F;
+                // Pack-a-Punch Mark II guns get a pulsing glow on their HUD icon.
+                R.image.classList.toggle(
+                    "ui-weapon-pap",
+                    j?.type === "gun" && !!j.zombieUpgraded,
+                );
             }
             if (B.equipped) {
                 R.div.style.backgroundColor = L.equipped

@@ -2252,6 +2252,24 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.31, util.random(0.55, 0.7), 1));
         },
     },
+    // Pack-a-Punch: rings pulsing out of the machine's core while it works.
+    papRing: {
+        image: ["part-pap-ring-01.img"],
+        life: 0.7,
+        drag: 0,
+        rotVel: 0,
+        scale: {
+            start: 0.32,
+            end: 0.95,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 0.9,
+            end: 0,
+            lerp: new Range(0.2, 1),
+        },
+        color: 0x9fe8ff,
+    },
     explosionBomb: {
         image: ["part-frag-burst-02.img"],
         life: 0.5,

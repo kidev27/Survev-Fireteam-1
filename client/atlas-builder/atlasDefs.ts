@@ -64,6 +64,10 @@ export const scaledSprites: Record<string, number> = {
     "map/map-zombie-perk-quick-revive.png": 0.15,
     "map/map-zombie-perk-stamin-up.png": 0.15,
     "map/map-zombie-perk-double-tap.png": 0.15,
+    // Pack-a-Punch art is 640x620; keep in step with ZombiePackAPunchSprite.atlasScale.
+    "map/map-zombie-pap.svg": 0.36,
+    "map/map-zombie-pap-on.svg": 0.36,
+    "map/map-zombie-pap-gear.svg": 0.36,
     // Smaller ceilings
     "map/map-building-house-ceiling.svg": 0.75,
     "map/map-building-hut-ceiling-01.svg": 0.75,
