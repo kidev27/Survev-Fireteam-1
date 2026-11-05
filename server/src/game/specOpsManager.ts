@@ -140,6 +140,7 @@ import {
     ZombieMysteryBoxRelocateUses,
     ZombieMysteryBoxRollDuration,
     ZombieMysteryBoxWeapons,
+    ZombieRayGun,
     ZombieUpgradeCost,
     zombieWaveCount,
 } from "./zombieMode.ts";
@@ -5690,6 +5691,10 @@ interface ZombieMysteryBoxState {
     ticker: number;
     cycleTicker: number;
     weapon: string;
+    /** Player who paid; only they can claim the reveal. */
+    ownerId: number;
+    /** Gun the roll lands on, picked when the roll starts. */
+    result: string;
     loot?: Loot;
 }
 
@@ -6049,6 +6054,7 @@ export class SpecOpsManager implements PracticeHost {
         box.setDirty();
     }
 
+    /** Gun shown while the box cycles (cosmetic only; the result is picked at roll start). */
     private pickMysteryBoxWeapon(previous = ""): string {
         const pool = ZombieMysteryBoxWeapons;
         let weapon = previous;
@@ -6056,6 +6062,104 @@ export class SpecOpsManager implements PracticeHost {
             weapon = pool[Math.floor(util.random(0, pool.length))];
         }
         return weapon;
+    }
+
+    /** The roll's real result: Ray Gun at boxChance if eligible, else an even pick of the rest. */
+    rollMysteryBoxResult(player: Player, rand = Math.random()): string {
+        if (rand < ZombieRayGun.boxChance && this.canGetWonderWeapon(player, ZombieRayGun.type)) {
+            return ZombieRayGun.type;
+        }
+        const pool = ZombieMysteryBoxWeapons;
+        return pool[Math.floor(util.random(0, pool.length))];
+    }
+
+    /** Not holding one, and no copy they dropped is still on the floor. */
+    canGetWonderWeapon(player: Player, type: string): boolean {
+        if (player.hasWonderWeapon(type)) return false;
+        const loots = this.game.lootBarn.loots;
+        for (let i = 0; i < loots.length; i++) {
+            const loot = loots[i];
+            if (!loot.destroyed && loot.type === type && loot.droppedById === player.__id) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Ray Gun bolt splash. Replaces the explosion damage pass: one grid query,
+     * zombies only, one segment check per target for walls. The client gets a
+     * visual-only explosion. Damage falls from def.damage at rad.min to
+     * def.damage * splashEdgeMult at rad.max, times the shot's damageMult
+     * (Double Tap). The shooter takes flat selfDamage if inside; teammates none.
+     */
+    rayGunSplash(
+        pos: Vec2,
+        layer: number,
+        shooter: Player | undefined,
+        damageMult: number,
+        skipIds?: Set<number>,
+    ): void {
+        const def = GameObjectDefs.typeToDef("explosion_raygun", "explosion");
+        this.game.explosionBarn.addVisualExplosion("explosion_raygun", pos, layer);
+        const rad = def.rad.max;
+        const objs = this.game.grid.intersectCollider(collider.createCircle(pos, rad));
+        for (let i = 0; i < objs.length; i++) {
+            const obj = objs[i];
+            if (obj.__type !== ObjectType.Player) continue;
+            const target = obj as Player;
+            if (target.dead || !util.sameLayer(target.layer, layer)) continue;
+            if (skipIds?.has(target.__id)) continue;
+
+            const isShooter = !!shooter && target === shooter;
+            const isEnemy = target.specOpsKind === "enemy"
+                && (!shooter || target.teamId !== shooter.teamId);
+            if (!isShooter && !isEnemy) continue;
+
+            const toTarget = v2.sub(target.pos, pos);
+            const dist = Math.max(v2.length(toTarget) - target.rad, 0);
+            if (dist > rad) continue;
+            if (!this.rayGunSplashClear(pos, target.pos, layer)) continue;
+
+            const dir = dist > 0.001 ? v2.normalize(toTarget) : v2.create(1, 0);
+            let amount: number;
+            if (isShooter) {
+                if (target.downed) continue;
+                amount = ZombieRayGun.selfDamage;
+            } else {
+                const t = math.clamp((dist - def.rad.min) / (rad - def.rad.min), 0, 1);
+                amount = def.damage
+                    * math.lerp(t, 1, ZombieRayGun.splashEdgeMult)
+                    * damageMult;
+            }
+            target.damage({
+                amount,
+                damageType: GameConfig.DamageType.Player,
+                source: shooter,
+                gameSourceType: ZombieRayGun.type,
+                weaponSourceType: ZombieRayGun.type,
+                dir,
+                isExplosion: true,
+            });
+        }
+    }
+
+    /** Splash is blocked by solid walls/obstacles between the blast and the target. */
+    private rayGunSplashClear(from: Vec2, to: Vec2, layer: number): boolean {
+        const objs = this.game.grid.intersectLineSegment(from, to);
+        for (let i = 0; i < objs.length; i++) {
+            const obj = objs[i];
+            if (obj.__type !== ObjectType.Obstacle) continue;
+            const obstacle = obj as Obstacle;
+            if (
+                obstacle.dead
+                || !obstacle.collidable
+                || obstacle.height < GameConfig.bullet.height
+                || !util.sameLayer(obstacle.layer, layer)
+            ) continue;
+            if (collider.intersectSegment(obstacle.collider, from, to)) return false;
+        }
+        return true;
     }
 
     private replaceMysteryBoxLoot(state: ZombieMysteryBoxState, locked: boolean): void {
@@ -6078,6 +6182,7 @@ export class SpecOpsManager implements PracticeHost {
         loot.isPreloadedGun = true;
         loot.mysteryBoxLocked = locked;
         loot.mysteryBoxId = state.box.__id;
+        loot.mysteryBoxOwnerId = state.ownerId;
         loot.ignoreObstacleId = state.box.__id;
         state.loot = loot;
     }
@@ -6123,6 +6228,7 @@ export class SpecOpsManager implements PracticeHost {
             if (state.ticker <= 0) {
                 state.phase = "claim";
                 state.ticker = ZombieMysteryBoxClaimDuration;
+                state.weapon = this.resolveMysteryBoxResult(state);
                 this.replaceMysteryBoxLoot(state, false);
                 this.setMysteryBoxVisual(state.box, true, true);
             }
@@ -6146,7 +6252,22 @@ export class SpecOpsManager implements PracticeHost {
         }
     }
 
-    /** Starts the shared BO2-style roll; the revealed gun is picked up manually. */
+    /**
+     * Final gun at reveal. If the owner picked up a Ray Gun mid-roll (or left),
+     * a Ray Gun result falls back to a normal box gun so nobody gets two.
+     */
+    private resolveMysteryBoxResult(state: ZombieMysteryBoxState): string {
+        const def = GameObjectDefs.typeToDefSafe(state.result) as GunDef | undefined;
+        if (!def?.wonderWeapon) return state.result;
+        const owner = this.game.objectRegister.getById(state.ownerId) as Player | undefined;
+        if (owner && owner.__type === ObjectType.Player && this.canGetWonderWeapon(owner, state.result)) {
+            return state.result;
+        }
+        const pool = ZombieMysteryBoxWeapons;
+        return pool[Math.floor(util.random(0, pool.length))];
+    }
+
+    /** Starts the shared BO2-style roll; only the payer can pick up the revealed gun. */
     tryUseMysteryBox(player: Player, box: Obstacle): boolean {
         if (!this.zombieMode || box.type !== "zombie_mystery_box" || !box.button) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
@@ -6169,6 +6290,8 @@ export class SpecOpsManager implements PracticeHost {
             ticker: ZombieMysteryBoxRollDuration,
             cycleTicker: 0,
             weapon: this.pickMysteryBoxWeapon(),
+            ownerId: player.__id,
+            result: this.rollMysteryBoxResult(player),
         };
         this.mysteryBoxState = state;
         this.replaceMysteryBoxLoot(state, true);

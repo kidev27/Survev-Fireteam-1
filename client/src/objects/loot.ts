@@ -131,11 +131,15 @@ export class Loot implements AbstractObject {
             this.container.texture = itemDef.lootImg.border
                 ? PIXI.Texture.from(itemDef.lootImg.border)
                 : PIXI.Texture.EMPTY;
-            if (this.isPreloadedGun) {
+            const wonderWeapon = itemDef.type === "gun" && !!(itemDef as GunDef).wonderWeapon;
+            if (this.isPreloadedGun && !wonderWeapon) {
                 this.container.texture = PIXI.Texture.from("loot-circle-outer-06.img");
             }
             const ammo = GameObjectDefs.typeToDefSafe((itemDef as GunDef).ammo) as AmmoDef;
-            if (ammo) {
+            if (wonderWeapon) {
+                // Wonder weapons keep their own glow ring + tint (client-only).
+                this.container.tint = itemDef.lootImg.borderTint;
+            } else if (ammo) {
                 this.container.tint = ammo.lootImg.tintDark!;
             } else if (itemDef.lootImg.borderTint) {
                 this.container.tint = itemDef.lootImg.borderTint;

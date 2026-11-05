@@ -205,7 +205,7 @@ export class Bullet {
         this.speed = bulletDef.speed * this.speedMult * variance;
         this.hasModifier = this.speedMult !== 1 || this.distanceMult !== 1;
         this.onHitFx = bulletDef.onHit ?? params.onHitFx;
-        this.canReflect = this.onHitFx !== "explosion_rounds";
+        this.canReflect = this.onHitFx !== "explosion_rounds" && this.onHitFx !== "explosion_raygun";
         this.damagedObjIds = new Set();
 
         this.hasOnHitFx = !!this.onHitFx;
@@ -384,19 +384,31 @@ export class Bullet {
             if (this.onHitFx === "explosion_rounds" && def.useExplosiveRoundsAlt) {
                 this.onHitFx = "explosion_rounds_sg";
             }
-            this.bulletManager.game.explosionBarn.addExplosion(
-                this.onHitFx,
-                // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles
-                v2.sub(this.pos, v2.mul(this.dir, 0.1)),
-                this.layer,
-                {
-                    source: this.player,
-                    gameSourceType: this.shotSourceType,
-                    weaponSourceType: this.shotSourceType,
-                    mapSourceType: this.mapSourceType,
-                    damageType: this.damageType,
-                },
-            );
+            const specOps = this.bulletManager.game.specOps;
+            if (this.onHitFx === "explosion_raygun" && specOps) {
+                // Cheap zombie-only splash instead of a full raycast explosion.
+                specOps.rayGunSplash(
+                    v2.sub(this.pos, v2.mul(this.dir, 0.1)),
+                    this.layer,
+                    this.player,
+                    this.damageMult,
+                    this.damagedObjIds,
+                );
+            } else {
+                this.bulletManager.game.explosionBarn.addExplosion(
+                    this.onHitFx,
+                    // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles
+                    v2.sub(this.pos, v2.mul(this.dir, 0.1)),
+                    this.layer,
+                    {
+                        source: this.player,
+                        gameSourceType: this.shotSourceType,
+                        weaponSourceType: this.shotSourceType,
+                        mapSourceType: this.mapSourceType,
+                        damageType: this.damageType,
+                    },
+                );
+            }
         }
 
         // set active at the end of the update because:
@@ -617,6 +629,8 @@ export class Bullet {
                 // Continue travelling if non-collidable
                 hit = col.collidable;
             } else if (col.type == "player") {
+                // Remembered so on-hit splash (Ray Gun) doesn't hit the same target twice.
+                this.damagedObjIds.add(col.player!.__id);
                 if (!shooterDead) {
                     const isHighValueTarget = this.player?.hasPerk("targeting") && col.player!.perks.length;
 

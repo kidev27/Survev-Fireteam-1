@@ -441,6 +441,22 @@ const ExplosionEffectDefs: Record<string, ExplotionDef> = {
         shakeDur: 0,
         lifetime: 1,
     },
+    raygun: {
+        burst: {
+            particle: "explosionRaygun",
+            scale: 0.55,
+            sound: {
+                grass: "ray_gun_explosion",
+                water: "ray_gun_explosion",
+                detune: 900,
+                volume: 0.45,
+            },
+        },
+        rippleCount: 2,
+        shakeStr: 0,
+        shakeDur: 0,
+        lifetime: 1,
+    },
     rounds_sg: {
         burst: {
             particle: "explosionRounds",

@@ -116,6 +116,20 @@ export const ZombieMysteryBoxWeapons = [
 
 export type ZombieMysteryBoxWeapon = typeof ZombieMysteryBoxWeapons[number];
 
+/**
+ * Ray Gun (wonder weapon). The box rolls it at `boxChance`; the other box guns
+ * split the rest evenly. A player can't roll it while holding one or while a
+ * Ray Gun they dropped is still on the floor.
+ */
+export const ZombieRayGun = {
+    type: "raygun",
+    boxChance: 0.02,
+    /** Splash (explosion_raygun) falls from damage at rad.min to this fraction at rad.max. */
+    splashEdgeMult: 0.5,
+    /** Flat damage to the shooter when caught in their own splash. */
+    selfDamage: 10,
+} as const;
+
 export function isZombieClass(kind: string | undefined): kind is ZombieClass {
     return kind === "zombie_walker";
 }

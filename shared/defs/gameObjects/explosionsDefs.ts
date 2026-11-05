@@ -98,6 +98,19 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
         explosionEffectType: "rounds",
         decalType: "decal_rounds_explosion",
     },
+    // Ray Gun bolt. Server damage is applied by SpecOpsManager.rayGunSplash
+    // (cheap circle query, no raycast fan); this def drives the client effect
+    // and holds the splash numbers.
+    explosion_raygun: {
+        type: "explosion",
+        damage: 90,
+        obstacleDamage: 0,
+        rad: { min: 1, max: 3 },
+        shrapnelCount: 0,
+        shrapnelType: "shrapnel_usas",
+        explosionEffectType: "raygun",
+        decalType: "",
+    },
     explosion_rounds_sg: {
         type: "explosion",
         damage: 3,

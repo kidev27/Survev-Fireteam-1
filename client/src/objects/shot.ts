@@ -236,6 +236,7 @@ export class ShotBarn {
                         && !player.m_netData.m_dead
                         && player.m_netData.m_activeWeapon == shot.weaponType
                         && weaponDef.caseTiming == "shoot"
+                        && !weaponDef.noCasing
                     ) {
                         createCasingParticle(
                             shot.weaponType,

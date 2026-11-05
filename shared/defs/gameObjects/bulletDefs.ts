@@ -18,6 +18,10 @@ export interface BulletDef {
     onHit?: string;
     noDistAdj?: boolean;
     useExplosiveRoundsAlt?: boolean;
+    /** Client-only glow sprite drawn on the bolt head (no server cost). */
+    glowColor?: number;
+    /** Sprite scale of the glow (part-flare-01, ~6 world units at 1). */
+    glowScale?: number;
 }
 
 export const BaseDefs: Record<string, BulletDef> = {
@@ -435,6 +439,23 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerColor: "50AE",
         tracerWidth: 0.12,
         tracerLength: 0.8,
+    },
+    bullet_raygun: {
+        type: "bullet",
+        damage: 180,
+        obstacleDamage: 0.25,
+        falloff: 1,
+        speed: 45,
+        distance: 60,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "raygun",
+        tracerWidth: 0.25,
+        tracerLength: 0.25,
+        onHit: "explosion_raygun",
+        noDistAdj: true,
+        glowColor: 0x7dff6b,
+        glowScale: 0.45,
     },
     bullet_barrett: {
         type: "bullet",

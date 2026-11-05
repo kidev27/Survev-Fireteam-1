@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="232" viewBox="0 0 56 232">
+  <defs>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#b8ffad" stop-opacity=".9"/>
+      <stop offset=".45" stop-color="#7dff6b" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#7dff6b" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="aura" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#7dff6b" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#7dff6b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- faint wonder-weapon aura -->
+  <g transform="translate(0 18)"><ellipse cx="28" cy="150" rx="28" ry="62" fill="url(#aura)"/>
+  <g stroke="#000" stroke-linejoin="round">
+    <!-- rear chrome fins -->
+    <path d="M14 186 L3 192 L4 197 L15 192 Z" fill="#d7dbe0" stroke-width="2.5"/>
+    <path d="M42 186 L53 192 L52 197 L41 192 Z" fill="#d7dbe0" stroke-width="2.5"/>
+    <!-- grip / rear body -->
+    <rect x="13" y="168" width="30" height="32" rx="7" fill="#c8202a" stroke-width="4"/>
+    <!-- main body -->
+    <rect x="9" y="138" width="38" height="36" rx="12" fill="#d42a33" stroke-width="4"/>
+    <!-- dial seen from above -->
+    <rect x="21" y="150" width="14" height="14" rx="7" fill="#d7dbe0" stroke-width="2.5"/>
+    <circle cx="28" cy="157" r="3" fill="#9aa2ab" stroke-width="1.5"/>
+    <!-- coil -->
+    <rect x="15" y="118" width="26" height="22" rx="5" fill="#86d8f2" stroke-width="3.5"/>
+    <path d="M17 124 H39 M17 129 H39 M17 134 H39" fill="none" stroke="#4aa3c9" stroke-width="2"/>
+    <!-- barrel -->
+    <rect x="22" y="98" width="12" height="22" rx="2" fill="#d42a33" stroke-width="3.5"/>
+    <!-- gold fins -->
+    <rect x="15" y="113" width="26" height="4" rx="1.5" fill="#f2c230" stroke-width="2.5"/>
+    <rect x="17" y="106" width="22" height="4" rx="1.5" fill="#f2c230" stroke-width="2.5"/>
+    <rect x="19" y="99" width="18" height="4" rx="1.5" fill="#f2c230" stroke-width="2.5"/>
+    <!-- emitter -->
+    <rect x="25.5" y="90" width="5" height="9" fill="#d7dbe0" stroke-width="2"/>
+    <circle cx="28" cy="86" r="11" fill="url(#glow)" stroke="none"/>
+    <circle cx="28" cy="86" r="5" fill="#7dff6b" stroke-width="2.5"/>
+    <circle cx="26.6" cy="84.6" r="1.5" fill="#eaffe6" stroke="none"/>
+  </g>
+</g></svg>

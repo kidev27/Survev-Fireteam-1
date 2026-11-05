@@ -152,10 +152,21 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             maxInstances: 5,
         },
+        raygun_01: {
+            path: "audio/guns/raygun_01.mp3",
+            volume: 1,
+            maxInstances: 5,
+        },
         deagle_reload_01: {
             path: "audio/guns/deagle_reload_01.mp3",
             volume: 1,
         },
+        //raygun reload
+        ray_gun_reload_01: {
+            path: "audio/guns/ray_gun_reload_01.mp3",
+            volume: 1,
+        },
+        
         deagle_reload_02: {
             path: "audio/guns/deagle_reload_02.mp3",
             volume: 1,
@@ -1351,6 +1362,11 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         explosion_05: {
             path: "audio/sfx/explosion_05.mp3",
+            volume: 1,
+        },
+        //ray gun explosion
+        ray_gun_explosion: {
+            path: "audio/sfx/ray_gun_explosion.mp3",
             volume: 1,
         },
         explosion_smoke_01: {

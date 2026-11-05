@@ -151,7 +151,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1029,
+    protocolVersion: 1030,
     Action,
     Anim,
     DamageType,
@@ -372,6 +372,12 @@ export const GameConfig = {
             saturated: 0xfff088,
             chambered: 0xffdf00,
             apSaturated: 0xff8000,
+        },
+        raygun: {
+            regular: 0x7dff6b,
+            saturated: 0x4fe63a,
+            chambered: 0x7dff6b,
+            apSaturated: 0x4fe63a,
         },
         "308sub": {
             regular: 0x252b00,
