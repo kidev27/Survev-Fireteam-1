@@ -4216,6 +4216,12 @@ export class Player extends BaseGameObject {
         };
     }
 
+    /** True if either gun slot holds this wonder weapon. */
+    hasWonderWeapon(type: string): boolean {
+        return this.weapons[GameConfig.WeaponSlot.Primary].type === type
+            || this.weapons[GameConfig.WeaponSlot.Secondary].type === type;
+    }
+
     pickupTicker = 0;
     pickupLoot(obj: Loot) {
         if (obj.destroyed || obj.mysteryBoxLocked) return;
@@ -4235,6 +4241,19 @@ export class Player extends BaseGameObject {
 
         if (this.pickupTicker > 0) return;
         this.pickupTicker = 0.1;
+
+        // Mystery Box rolls belong to the player who paid.
+        if (obj.mysteryBoxOwnerId && obj.mysteryBoxOwnerId !== this.__id) return;
+
+        // Wonder weapons: one per player, never two in the gun slots.
+        if (def.type === "gun" && def.wonderWeapon && this.hasWonderWeapon(obj.type)) {
+            const msg = new net.PickupMsg();
+            msg.item = obj.type;
+            msg.type = net.PickupMsgType.AlreadyOwned;
+            this.client.sendMsg(net.MsgType.Pickup, msg);
+            return;
+        }
+
         let amountLeft = 0;
         let lootToAdd = obj.type;
         const pickupMsg = new net.PickupMsg();
@@ -4714,14 +4733,19 @@ export class Player extends BaseGameObject {
         this.game.playerBarn.addEmote("emote_loot", this.__id, chosenWeaponType);
     }
 
-    dropLoot(type: string, count = 1, useCountForAmmo?: boolean) {
+    dropLoot(type: string, count = 1, useCountForAmmo?: boolean): Loot | undefined {
         this.mobileDropTicker = 3;
-        this.game.lootBarn.addLoot(type, this.pos, this.layer, count, {
+        const loot = this.game.lootBarn.addLoot(type, this.pos, this.layer, count, {
             useCountForAmmo,
             pushSpeed: util.random(7.5, 11),
             dir: v2.neg(this.dir),
             source: "player",
         });
+        const def = GameObjectDefs.typeToDefSafe(type) as GunDef | undefined;
+        if (loot && def?.type === "gun" && def.wonderWeapon) {
+            loot.droppedById = this.__id;
+        }
+        return loot;
     }
 
     dropArmor(item: string): boolean {

@@ -57,6 +57,9 @@ export class BulletBarn {
         alive: boolean;
         container: PIXI.Container;
         bulletTrail: PIXI.Sprite;
+        /** Optional glow on the bolt head (BulletDef.glowColor). */
+        glow: PIXI.Sprite;
+        glowScale: number;
         isNew: boolean;
         collided: boolean;
         scale: number;
@@ -118,6 +121,9 @@ export class BulletBarn {
             b.bulletTrail = PIXI.Sprite.from("player-bullet-trail-02.img");
             b.bulletTrail.anchor.set(0.5, 0.5);
             b.container.addChild(b.bulletTrail);
+            b.glow = PIXI.Sprite.from("part-flare-01.img");
+            b.glow.anchor.set(0.5, 0.5);
+            b.glow.visible = false;
             this.bullets.push(b);
         }
 
@@ -188,6 +194,14 @@ export class BulletBarn {
         }
         b.container.visible = true;
         renderer.addPIXIObj(b.container, b.layer, 20);
+
+        b.glowScale = bulletDef.glowScale ?? 0;
+        b.glow.visible = bulletDef.glowColor !== undefined;
+        if (b.glow.visible) {
+            b.glow.tint = bulletDef.glowColor!;
+            b.glow.alpha = 0.9;
+            renderer.addPIXIObj(b.glow, b.layer, 21);
+        }
     }
 
     m_update(
@@ -205,9 +219,11 @@ export class BulletBarn {
             const b = this.bullets[i];
             if (b.collided) {
                 b.scale = math.max(b.scale - dt * 6, 0);
+                if (b.glow.visible) b.glow.alpha = 0.9 * b.scale;
                 if (b.scale <= 0) {
                     b.collided = false;
                     b.container.visible = false;
+                    b.glow.visible = false;
                 }
             }
             if (b.alive) {
@@ -509,6 +525,7 @@ export class BulletBarn {
                     if (ee != b.layer) {
                         b.layer = ee;
                         renderer.addPIXIObj(b.container, b.layer, 20);
+                        if (b.glow.visible) renderer.addPIXIObj(b.glow, b.layer, 21);
                     }
                 }
                 if (hit || math.eqAbs(distLeft, distTravel)) {
@@ -546,6 +563,10 @@ export class BulletBarn {
                 const screenScale = camera.m_pixels(1);
                 const trailLength = math.min(b.tracerLength * 15, dist / 2);
                 b.container.scale.set(screenScale * trailLength * b.scale, screenScale);
+                if (b.glow.visible) {
+                    b.glow.position.set(screenPos.x, screenPos.y);
+                    b.glow.scale.set(screenScale * b.glowScale);
+                }
             }
         }
     }

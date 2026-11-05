@@ -33,6 +33,8 @@ export interface GunDef {
         tint: number;
         border: string;
         borderTint: number;
+        /** Optional HUD/inventory icon (svg in img/loot) used instead of `sprite`. */
+        uiSprite?: string;
         scale: number;
         innerScale?: number;
         rot?: number;
@@ -81,6 +83,10 @@ export interface GunDef {
     ammoInfinite?: boolean;
     noPotatoSwap?: boolean;
     noDrop?: boolean;
+    /** Zombies wonder weapon: one per player, mystery-box only, never sold. */
+    wonderWeapon?: boolean;
+    /** Skip ejected shell casings (energy weapons). */
+    noCasing?: boolean;
     burstDelay?: number;
     burstCount?: number;
     dualWieldType?: string;
@@ -3105,6 +3111,57 @@ export const BaseDefs: Record<string, GunDef> = {
         sound: {
             shoot: "deagle_01",
             reload: "deagle_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_01",
+            deploy: "deagle_switch_01",
+        },
+    },
+    raygun: {
+        name: "Ray Gun",
+        type: "gun",
+        quality: 1,
+        fireMode: "single",
+        caseTiming: "shoot",
+        ammo: "50AE",
+        ammoSpawnCount: 60,
+        pistol: true,
+        wonderWeapon: true,
+        noCasing: true,
+        maxClip: 20,
+        maxReload: 20,
+        extendedClip: 20,
+        extendedReload: 20,
+        reloadTime: 3,
+        fireDelay: 0.33,
+        switchDelay: 0.3,
+        barrelLength: 2.7,
+        barrelOffset: 0,
+        recoilTime: 0.4,
+        moveSpread: 3,
+        shotSpread: 1.5,
+        bulletCount: 1,
+        bulletType: "bullet_raygun",
+        headshotMult: 1,
+        speed: { equip: 0, attack: 0 },
+        lootImg: {
+            sprite: "loot-weapon-raygun.img",
+            uiSprite: "loot-weapon-raygun-icon.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-glow.img",
+            borderTint: 0x7dff6b,
+            scale: 0.3,
+        },
+        worldImg: {
+            sprite: "gun-raygun-top-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 0, y: 0 },
+            recoil: 1,
+        },
+        particle: { shellScale: 1, shellOffset: 0.3 },
+        sound: {
+            shoot: "raygun_01",
+            reload: "ray_gun_reload_01",
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "deagle_switch_01",

@@ -209,8 +209,11 @@ export const helpers = {
             case "scope":
             case "backpack":
             case "perk":
-            case "xp":
-                return `img/loot/${def.lootImg?.sprite.slice(0, -4)}.svg`;
+            case "xp": {
+                const lootImg = def.lootImg as { sprite: string; uiSprite?: string } | undefined;
+                const sprite = lootImg?.uiSprite ?? lootImg?.sprite;
+                return sprite ? `img/loot/${sprite.slice(0, -4)}.svg` : "";
+            }
             case "heal_effect":
             case "boost_effect":
                 return `img/particles/${def.texture?.slice(0, -4)}.svg`;

@@ -883,9 +883,9 @@ test("Spec Ops shop lists all guns, perks, support, and gear", () => {
     const skus = new Set(SpecOpsShopCatalog.map((item) => item.sku));
 
     for (const type of Object.keys(GunDefs)) {
-        const def = GunDefs[type as keyof typeof GunDefs] as { noDrop?: boolean };
-        if (def.noDrop) {
-            expect(skus.has(type), `undroppable gun ${type} should not be sold`).toBe(false);
+        const def = GunDefs[type as keyof typeof GunDefs] as { noDrop?: boolean; wonderWeapon?: boolean };
+        if (def.noDrop || def.wonderWeapon) {
+            expect(skus.has(type), `undroppable/box-only gun ${type} should not be sold`).toBe(false);
             continue;
         }
         expect(skus.has(type), `missing gun ${type}`).toBe(true);

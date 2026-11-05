@@ -1,5 +1,6 @@
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { DamageType } from "../../../../shared/gameConfig.ts";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
 import { coldet } from "../../../../shared/utils/coldet.ts";
 import { collider } from "../../../../shared/utils/collider.ts";
@@ -276,6 +277,21 @@ export class ExplosionBarn {
         };
         this.explosions.push(explosion);
         this.newExplosions.push(explosion);
+    }
+
+    /**
+     * Sends the explosion to clients for its effect only. No damage pass,
+     * no raycasts, no decal on the server.
+     */
+    addVisualExplosion(type: string, pos: Vec2, layer: number) {
+        const def = GameObjectDefs.typeToDef(type, "explosion");
+        this.newExplosions.push({
+            rad: def.rad.max,
+            type,
+            pos,
+            layer,
+            damageParams: { damageType: DamageType.Player },
+        });
     }
 }
 

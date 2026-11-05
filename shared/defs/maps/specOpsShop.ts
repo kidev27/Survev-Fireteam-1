@@ -789,9 +789,12 @@ function specOpsDefaultWeaponCost(sku: string): number {
 
 const SpecOpsWeaponShopItems: SpecOpsShopItem[] = Object.keys(GunDefs)
     .filter((sku) => {
-        const def = GunDefs[sku as keyof typeof GunDefs] as { noDrop?: boolean } | undefined;
+        const def = GunDefs[sku as keyof typeof GunDefs] as
+            | { noDrop?: boolean; wonderWeapon?: boolean }
+            | undefined;
         // Undroppable guns (bugle, m9_cursed) stay find/role-only — not sold.
-        return !def?.noDrop;
+        // Wonder weapons (Ray Gun) are mystery-box only.
+        return !def?.noDrop && !def?.wonderWeapon;
     })
     .sort((a, b) => a.localeCompare(b))
     .map((sku) => ({

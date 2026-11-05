@@ -10,11 +10,14 @@ import {
     ZombieMysteryBoxRelocateUses,
     ZombieMysteryBoxRollDuration,
     ZombieMysteryBoxWeapons,
+    ZombieRayGun,
     ZombieEconomy,
     ZombieUpgradeCost,
     zombieWaveCount,
 } from "../../server/src/game/zombieMode.ts";
+import type { GunDef } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
+import { SpecOpsShopCatalog } from "../../shared/defs/maps/specOpsShop.ts";
 import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
 import { ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/maps/zombiePerks.ts";
 import {
@@ -90,7 +93,7 @@ test("Insta-Kill one-shots walkers, doubles elite damage, and expires for the te
     game.specOps!.startNextWave();
     game.specOps!.drainWaveSpawnQueuePublic();
     const walker = game.specOps!.livingEnemies()[0];
-    const elite = game.specOps!.spawnEnemyPublic("juggernaut")!;
+    const elite = game.specOps!.spawnEnemyPublic("juggernaut", true)!;
 
     game.specOps!.activateZombiePowerUp("zombie_powerup_insta_kill");
     game.specOps!.setNpcIgnoreOperators(true);
@@ -142,7 +145,7 @@ test("Nuke removes ordinary zombies and takes 35% of an elite's current health",
     game.specOps!.startNextWave();
     game.specOps!.drainWaveSpawnQueuePublic();
     const walkers = [...game.specOps!.livingEnemies()];
-    const elite = game.specOps!.spawnEnemyPublic("juggernaut")!;
+    const elite = game.specOps!.spawnEnemyPublic("juggernaut", true)!;
     const eliteHealth = elite.health;
 
     game.specOps!.activateZombiePowerUp("zombie_powerup_nuke");
@@ -703,4 +706,295 @@ test("Zombies economy: 500 to start, 10 per hit (capped), 60 per kill, +50 for m
     game.step(1);
     expect(ops.phase).toBe("intermission");
     expect(operator.specOpsCash).toBe(cash);
+});
+
+function rayGunGame(teamMode = TeamMode.Duo) {
+    const game = createGame(teamMode, "specops_complex");
+    const a = game.playerBarn.addTestPlayer({ name: "A" });
+    const b = game.playerBarn.addTestPlayer({ name: "B" });
+    game.update(0.1);
+    return { game, ops: game.specOps!, a, b };
+}
+
+function giveRayGun(player: { weaponManager: { setWeapon(slot: number, type: string, ammo: number): void } }) {
+    player.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, ZombieRayGun.type, 20);
+}
+
+test("Ray Gun: wonder weapon def, 50AE, box-only (never in the shop)", () => {
+    const def = GameObjectDefs.typeToDef(ZombieRayGun.type, "gun") as GunDef;
+    expect(def.wonderWeapon).toBe(true);
+    expect(def.ammo).toBe("50AE");
+    expect(def.maxClip).toBe(20);
+    expect(def.bulletType).toBe("bullet_raygun");
+    expect(GameObjectDefs.typeToDef(def.bulletType, "bullet").damage).toBe(180);
+    const splash = GameObjectDefs.typeToDef("explosion_raygun", "explosion");
+    expect(splash.damage).toBe(90);
+    expect(splash.rad.max).toBe(3);
+    expect(SpecOpsShopCatalog.some((item) => item.sku === ZombieRayGun.type)).toBe(false);
+    expect(ZombieMysteryBoxWeapons).not.toContain(ZombieRayGun.type);
+});
+
+test("Ray Gun: 2% box odds, other 22 guns share the rest", () => {
+    const { ops, a } = rayGunGame(TeamMode.Solo);
+    expect(ZombieMysteryBoxWeapons).toHaveLength(22);
+    expect(ops.rollMysteryBoxResult(a, 0)).toBe(ZombieRayGun.type);
+    expect(ops.rollMysteryBoxResult(a, 0.0199)).toBe(ZombieRayGun.type);
+    for (let i = 0; i < 50; i++) {
+        const result = ops.rollMysteryBoxResult(a, 0.02 + (i / 50) * 0.98);
+        expect(ZombieMysteryBoxWeapons).toContain(result);
+    }
+    let hits = 0;
+    const rolls = 20000;
+    for (let i = 0; i < rolls; i++) {
+        if (ops.rollMysteryBoxResult(a) === ZombieRayGun.type) hits++;
+    }
+    expect(hits / rolls).toBeGreaterThan(0.012);
+    expect(hits / rolls).toBeLessThan(0.028);
+});
+
+test("Ray Gun: holding one or leaving a dropped one on the floor blocks rolling it; teammates roll their own", () => {
+    const { game, ops, a, b } = rayGunGame();
+    giveRayGun(a);
+    expect(ops.canGetWonderWeapon(a, ZombieRayGun.type)).toBe(false);
+    expect(ops.rollMysteryBoxResult(a, 0)).not.toBe(ZombieRayGun.type);
+    expect(ops.canGetWonderWeapon(b, ZombieRayGun.type)).toBe(true);
+
+    a.weaponManager.dropGun(GameConfig.WeaponSlot.Primary);
+    const dropped = game.lootBarn.loots.find((loot) => loot.type === ZombieRayGun.type && !loot.destroyed)!;
+    expect(dropped.droppedById).toBe(a.__id);
+    expect(a.hasWonderWeapon(ZombieRayGun.type)).toBe(false);
+    expect(ops.canGetWonderWeapon(a, ZombieRayGun.type)).toBe(false);
+    expect(ops.canGetWonderWeapon(b, ZombieRayGun.type)).toBe(true);
+
+    dropped.destroy();
+    expect(ops.canGetWonderWeapon(a, ZombieRayGun.type)).toBe(true);
+});
+
+test("Ray Gun: anyone without one can pick up a dropped one; nobody holds two", () => {
+    const { game, a, b } = rayGunGame();
+    v2.set(b.pos, v2.copy(a.pos));
+    giveRayGun(a);
+    giveRayGun(b);
+    a.weaponManager.dropGun(GameConfig.WeaponSlot.Primary);
+    const dropped = game.lootBarn.loots.find((loot) => loot.type === ZombieRayGun.type && !loot.destroyed)!;
+
+    // b already has one: blocked, loot stays, still one Ray Gun.
+    b.weaponManager.setWeapon(GameConfig.WeaponSlot.Secondary, "", 0);
+    b.pickupTicker = 0;
+    b.pickupLoot(dropped);
+    expect(dropped.destroyed).toBe(false);
+    expect(b.weapons.filter((w) => w.type === ZombieRayGun.type)).toHaveLength(1);
+
+    // a (no Ray Gun now) can take it back.
+    a.pickupTicker = 0;
+    a.pickupLoot(dropped);
+    expect(dropped.destroyed).toBe(true);
+    expect(a.hasWonderWeapon(ZombieRayGun.type)).toBe(true);
+});
+
+test("Mystery Box: only the player who paid can take the reveal", () => {
+    const { game, a: buyer, b: teammate } = rayGunGame();
+    const box = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_mystery_box")!;
+    const near = v2.add(box.pos, v2.create(0, -4.5));
+    v2.set(buyer.pos, near);
+    v2.set(teammate.pos, v2.copy(near));
+    game.grid.updateObject(buyer);
+    game.grid.updateObject(teammate);
+    game.specOps!.grantCash(buyer, ZombieMysteryBoxCost);
+    box.interact(buyer);
+    game.step(ZombieMysteryBoxRollDuration + 0.2);
+    const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
+    expect(prize.mysteryBoxOwnerId).toBe(buyer.__id);
+
+    teammate.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
+    box.interact(teammate);
+    teammate.pickupTicker = 0;
+    teammate.pickupLoot(prize);
+    expect(prize.destroyed).toBe(false);
+
+    buyer.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
+    buyer.pickupTicker = 0;
+    box.interact(buyer);
+    expect(prize.destroyed).toBe(true);
+});
+
+test("Mystery Box: a Ray Gun roll falls back to a normal gun if the payer got one mid-roll", () => {
+    const { game, a: buyer } = rayGunGame(TeamMode.Solo);
+    const box = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_mystery_box")!;
+    v2.set(buyer.pos, v2.add(box.pos, v2.create(0, -4.5)));
+    game.grid.updateObject(buyer);
+    game.specOps!.grantCash(buyer, ZombieMysteryBoxCost);
+
+    const random = Math.random;
+    Math.random = () => 0;
+    try {
+        box.interact(buyer);
+    } finally {
+        Math.random = random;
+    }
+    giveRayGun(buyer);
+    game.step(ZombieMysteryBoxRollDuration + 0.2);
+    const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
+    expect(prize.type).not.toBe(ZombieRayGun.type);
+    expect(ZombieMysteryBoxWeapons).toContain(prize.type);
+});
+
+test("Mystery Box: an eligible payer who rolls the Ray Gun gets it", () => {
+    const { game, a: buyer } = rayGunGame(TeamMode.Solo);
+    const box = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_mystery_box")!;
+    v2.set(buyer.pos, v2.add(box.pos, v2.create(0, -4.5)));
+    game.grid.updateObject(buyer);
+    game.specOps!.grantCash(buyer, ZombieMysteryBoxCost);
+    const random = Math.random;
+    Math.random = () => 0;
+    try {
+        box.interact(buyer);
+    } finally {
+        Math.random = random;
+    }
+    game.step(ZombieMysteryBoxRollDuration + 0.2);
+    const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
+    expect(prize.type).toBe(ZombieRayGun.type);
+    buyer.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
+    box.interact(buyer);
+    expect(buyer.hasWonderWeapon(ZombieRayGun.type)).toBe(true);
+    const slot = buyer.weapons.findIndex((w) => w.type === ZombieRayGun.type);
+    expect(buyer.weapons[slot].ammo).toBe(20);
+});
+
+test("Ray Gun splash: 90 near, 45 at the edge, zombies only, 10 to the shooter, none to teammates", () => {
+    const { game, ops, a: shooter, b: teammate } = rayGunGame();
+    ops.startNextWave();
+    ops.drainWaveSpawnQueuePublic();
+    const [near, edge, outside, ...others] = ops.livingEnemies();
+    const center = v2.copy(shooter.pos);
+    for (const z of others) {
+        v2.set(z.pos, v2.add(center, v2.create(-40, 40)));
+        game.grid.updateObject(z);
+    }
+    const place = (obj: typeof near, offset: number) => {
+        v2.set(obj.pos, v2.add(center, v2.create(0, offset)));
+        obj.layer = shooter.layer;
+        game.grid.updateObject(obj);
+    };
+    place(near, near.rad + 1);
+    place(edge, edge.rad + 3);
+    place(outside, outside.rad + 3.5);
+    place(teammate, -(teammate.rad + 1));
+    for (const z of [near, edge, outside]) z.health = 9999;
+    v2.set(shooter.pos, v2.add(center, v2.create(2, 0)));
+    game.grid.updateObject(shooter);
+    shooter.specOpsArmor = 0;
+    shooter.chest = "";
+    shooter.helmet = "";
+    const before = {
+        near: near.health,
+        edge: edge.health,
+        outside: outside.health,
+        mate: teammate.health,
+        shooter: shooter.health,
+    };
+
+    ops.rayGunSplash(center, shooter.layer, shooter, 1);
+    expect(before.near - near.health).toBeCloseTo(90, 1);
+    expect(before.edge - edge.health).toBeCloseTo(45, 1);
+    expect(outside.health).toBe(before.outside);
+    expect(teammate.health).toBe(before.mate);
+    expect(before.shooter - shooter.health).toBeCloseTo(ZombieRayGun.selfDamage, 1);
+
+    // Double Tap style damageMult scales zombie splash; the direct-hit target is skipped.
+    const nearHp = near.health;
+    const edgeHp = edge.health;
+    ops.rayGunSplash(center, shooter.layer, undefined, 2, new Set([edge.__id]));
+    expect(nearHp - near.health).toBeCloseTo(180, 1);
+    expect(edge.health).toBe(edgeHp);
+});
+
+test("Ray Gun bolt: 180 direct hit, splash on neighbours, no full explosion pass", () => {
+    const { game, ops, a: shooter } = rayGunGame(TeamMode.Solo);
+    ops.startNextWave();
+    ops.drainWaveSpawnQueuePublic();
+    const [target, neighbour] = ops.livingEnemies();
+    const start = v2.copy(shooter.pos);
+    // Clear the firing lane of every other player/bot.
+    for (const p of game.playerBarn.players) {
+        if (p === shooter || p === target || p === neighbour) continue;
+        v2.set(p.pos, v2.add(start, v2.create(-40, 40)));
+        game.grid.updateObject(p);
+    }
+    const dir = v2.create(1, 0);
+    for (const [z, pos] of [
+        [target, v2.add(start, v2.create(6, 0))],
+        [neighbour, v2.add(start, v2.create(6 + target.rad + neighbour.rad + 0.6, 0.5))],
+    ] as const) {
+        v2.set(z.pos, pos);
+        z.layer = shooter.layer;
+        z.health = 9999;
+        game.grid.updateObject(z);
+    }
+    const t0 = target.health;
+    const n0 = neighbour.health;
+    const bullet = game.bulletBarn.fireBullet({
+        bulletType: "bullet_raygun",
+        gameSourceType: ZombieRayGun.type,
+        pos: v2.add(start, v2.mul(dir, shooter.rad + 0.1)),
+        dir,
+        layer: shooter.layer,
+        damageMult: 1,
+        damageType: GameConfig.DamageType.Player,
+        playerId: shooter.__id,
+    });
+    for (let i = 0; i < 20 && bullet.active; i++) {
+        game.bulletBarn.update(0.02);
+        game.explosionBarn.update();
+    }
+    expect(bullet.active).toBe(false);
+    expect(t0 - target.health).toBeCloseTo(180, 0);
+    expect(n0 - neighbour.health).toBeGreaterThan(40);
+    expect(n0 - neighbour.health).toBeLessThanOrEqual(90.5);
+    expect(game.explosionBarn.explosions).toHaveLength(0);
+    expect(game.explosionBarn.newExplosions.some((e) => e.type === "explosion_raygun")).toBe(true);
+});
+
+test("Zombies has no contracts (no Most Wanted)", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    expect(ops.zombieMode).toBe(true);
+    expect(ops.contractsEnabled).toBe(false);
+});
+
+test("Zombies only ever spawns zombies: no soldiers, bosses, or Ironclads", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+
+    // Non-zombie classes are refused; zombies still spawn.
+    expect(() => ops.spawnEnemyPublic("warlord")).toThrow();
+    expect(() => ops.spawnEnemyPublic("rifle")).toThrow();
+    expect(ops.spawnEnemyPublic("zombie_walker").name).toBe("Zombie");
+
+    // Late-round IR strobes call airstrikes but never summon Ironclads.
+    ops.wave = 30;
+    const before = ops.livingEnemies().length;
+    ops.onHumanStrobeThrown(operator, v2.copy(operator.pos));
+    expect(ops.livingEnemies().length).toBe(before);
+
+    // Boss (10/30), mini-boss (7), vest (5/10) and Ironclad-era rounds are plain zombie rounds.
+    for (const wave of [7, 10, 30]) {
+        ops.wave = wave - 1;
+        ops.startNextWave();
+        ops.drainWaveSpawnQueuePublic();
+    }
+    const enemies = ops.livingEnemies();
+    expect(enemies.length).toBeGreaterThan(0);
+    for (const enemy of enemies) {
+        expect(enemy.name).toBe("Zombie");
+        expect(enemy.weapons[GameConfig.WeaponSlot.Primary].type).toBe("");
+        expect(enemy.weapons[GameConfig.WeaponSlot.Secondary].type).toBe("");
+        expect(enemy.specOpsStrobeTank).toBe(false);
+        expect(enemy.specOpsSuicideVest).toBe(false);
+    }
 });

@@ -2233,6 +2233,25 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.7, util.random(0.75, 0.8)));
         },
     },
+    explosionRaygun: {
+        image: ["part-frag-burst-03.img"],
+        life: 0.45,
+        drag: 0,
+        rotVel: 0,
+        scale: {
+            start: 1,
+            end: 4.5,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.6, 1),
+        },
+        color: function() {
+            return util.rgbToInt(util.hsvToRgb(0.31, util.random(0.55, 0.7), 1));
+        },
+    },
     explosionBomb: {
         image: ["part-frag-burst-02.img"],
         life: 0.5,
