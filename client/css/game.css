@@ -3634,6 +3634,24 @@ body:not(.ui-specops-mode) #ui-loot-armor_plate {
   text-align: center;
 }
 
+/* Desktop slots (set by fitWeaponName in ui2.ts): keep long names clear of the icon. */
+.ui-weapon-name.ui-weapon-name-fit {
+  left: 68px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ui-weapon-name.ui-weapon-name-wrap {
+  margin-top: 0;
+  bottom: 3px;
+  max-height: 2.05em;
+  line-height: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
 .ui-weapon-number {
   position: absolute;
   font-size: 24px;
