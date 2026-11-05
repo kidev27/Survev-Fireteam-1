@@ -746,7 +746,8 @@ test("Mystery Box charges once, synchronizes its roll, and replaces the held gun
     expect(box.button?.canUse).toBe(false);
     let preview = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id)!;
     expect(preview.mysteryBoxLocked).toBe(true);
-    expect(ZombieMysteryBoxWeapons).toContain(preview.type);
+    // The cycling preview is any box gun, or the Ray Gun flashing by as a tease.
+    expect([...ZombieMysteryBoxWeapons, ZombieRayGun.type]).toContain(preview.type);
 
     const teammateCash = teammate.specOpsCash;
     box.interact(teammate);
@@ -1167,4 +1168,48 @@ test("Normal zombies wear one of the three zombie bodies, which players can't eq
     for (let i = 0; i < 30; i++) seen.add(ops.spawnEnemyPublic("zombie_walker").outfit);
     for (const outfit of seen) expect(zombieBodies).toContain(outfit);
     expect(seen.size).toBeGreaterThan(1);
+});
+
+test("Ray Gun: legendary ring on the floor and it flashes by in the box cycle", () => {
+    const def = GameObjectDefs.typeToDef(ZombieRayGun.type, "gun") as GunDef;
+    expect(def.lootImg.legendaryRing).toBe("loot-circle-legendary-ring.img");
+    expect(GameObjectDefs.typeToDef("explosion_legendary_reveal", "explosion").damage).toBe(0);
+
+    const { ops } = rayGunGame(TeamMode.Solo);
+    const pick = (previous: string) =>
+        (ops as unknown as { pickMysteryBoxWeapon(previous: string): string }).pickMysteryBoxWeapon(previous);
+    const seen = new Set<string>();
+    let previous = "";
+    for (let i = 0; i < 2000; i++) {
+        previous = pick(previous);
+        seen.add(previous);
+    }
+    expect(seen.has(ZombieRayGun.type)).toBe(true);
+    for (const gun of ZombieMysteryBoxWeapons) expect(seen.has(gun), gun).toBe(true);
+    expect(seen.size).toBe(ZombieMysteryBoxWeapons.length + 1);
+});
+
+test("Ray Gun: the box reveal plays the legendary burst", () => {
+    const { game, a: buyer } = rayGunGame(TeamMode.Solo);
+    const box = game.map.obstacles.find((obstacle) => obstacle.type === "zombie_mystery_box")!;
+    v2.set(buyer.pos, v2.add(box.pos, v2.create(0, -4.5)));
+    game.grid.updateObject(buyer);
+    game.specOps!.grantCash(buyer, ZombieMysteryBoxCost);
+    const random = Math.random;
+    Math.random = () => 0;
+    try {
+        box.interact(buyer);
+    } finally {
+        Math.random = random;
+    }
+    let burst = false;
+    const t0 = ZombieMysteryBoxRollDuration + 0.3;
+    for (let t = 0; t < t0; t += 0.1) {
+        game.explosionBarn.newExplosions.length = 0;
+        game.step(0.1);
+        burst ||= game.explosionBarn.newExplosions.some((e) => e.type === "explosion_legendary_reveal");
+    }
+    expect(burst).toBe(true);
+    const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
+    expect(prize.type).toBe(ZombieRayGun.type);
 });

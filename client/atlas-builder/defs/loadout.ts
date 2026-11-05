@@ -456,6 +456,8 @@ export const LoadoutAtlas: AtlasDef = {
         "loot/loot-zombie-nuke.svg",
         "loot/loot-zombie-powerup-glow.svg",
         "loot/loot-circle-outer-glow.svg",
+        "loot/loot-circle-legendary-base.svg",
+        "loot/loot-circle-legendary-ring.svg",
         "loot/loot-scope-00.svg",
         "loot/loot-scope-01.svg",
         "loot/loot-scope-02.svg",

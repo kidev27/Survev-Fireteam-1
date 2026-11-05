@@ -6076,12 +6076,16 @@ export class SpecOpsManager implements PracticeHost {
         box.setDirty();
     }
 
-    /** Gun shown while the box cycles (cosmetic only; the result is picked at roll start). */
+    /**
+     * Gun shown while the box cycles. Cosmetic only (the result is picked at roll
+     * start), so the Ray Gun can flash by as a tease, like BO2.
+     */
     private pickMysteryBoxWeapon(previous = ""): string {
         const pool = ZombieMysteryBoxWeapons;
         let weapon = previous;
         while (weapon === previous) {
-            weapon = pool[Math.floor(util.random(0, pool.length))];
+            const idx = Math.floor(util.random(0, pool.length + 1));
+            weapon = idx >= pool.length ? ZombieRayGun.type : pool[idx];
         }
         return weapon;
     }
@@ -6253,6 +6257,14 @@ export class SpecOpsManager implements PracticeHost {
                 state.weapon = this.resolveMysteryBoxResult(state);
                 this.replaceMysteryBoxLoot(state, false);
                 this.setMysteryBoxVisual(state.box, true, true);
+                if ((GameObjectDefs.typeToDefSafe(state.weapon) as GunDef | undefined)?.wonderWeapon) {
+                    // Legendary reveal: rainbow burst + chime on clients (visual only).
+                    this.game.explosionBarn.addVisualExplosion(
+                        "explosion_legendary_reveal",
+                        v2.copy(state.box.pos),
+                        state.box.layer,
+                    );
+                }
             }
             return;
         }

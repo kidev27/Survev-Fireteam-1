@@ -68,8 +68,8 @@ export const ZombieEconomy = {
 export const ZombieKillBounty = ZombieEconomy.killCash;
 
 export const ZombieMysteryBoxCost = 1000;
-export const ZombieMysteryBoxRollDuration = 2.4;
-export const ZombieMysteryBoxCycleInterval = 0.16;
+export const ZombieMysteryBoxRollDuration = 4;
+export const ZombieMysteryBoxCycleInterval = 0.19;
 export const ZombieMysteryBoxClaimDuration = 10;
 export const ZombieMysteryBoxCooldown = 1.25;
 export const ZombieMysteryBoxRelocateUses = 3;
@@ -128,7 +128,7 @@ export const ZombieMaxAmmoThrowables: readonly string[] = ["frag", "mirv"];
  */
 export const ZombieRayGun = {
     type: "raygun",
-    boxChance: 0.02,
+    boxChance: 0.04,
     /** Splash (explosion_raygun) falls from damage at rad.min to this fraction at rad.max. */
     splashEdgeMult: 0.5,
     /** Flat damage to the shooter when caught in their own splash. */

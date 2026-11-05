@@ -36,6 +36,8 @@ export interface GunDef {
         borderTint: number;
         /** Optional HUD/inventory icon (svg in img/loot) used instead of `sprite`. */
         uiSprite?: string;
+        /** Legendary loot: a rainbow ring sprite that slowly orbits behind the icon (client only). */
+        legendaryRing?: string;
         scale: number;
         innerScale?: number;
         rot?: number;
@@ -3152,8 +3154,9 @@ export const BaseDefs: Record<string, GunDef> = {
             sprite: "loot-weapon-raygun.img",
             uiSprite: "loot-weapon-raygun-icon.img",
             tint: 0xffffff,
-            border: "loot-circle-outer-glow.img",
-            borderTint: 0x7dff6b,
+            border: "loot-circle-legendary-base.img",
+            borderTint: 0xffffff,
+            legendaryRing: "loot-circle-legendary-ring.img",
             scale: 0.3,
         },
         worldImg: {

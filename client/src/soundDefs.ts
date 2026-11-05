@@ -1370,6 +1370,11 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             path: "audio/sfx/explosion_05.mp3",
             volume: 1,
         },
+        // Mystery Box lands on a wonder weapon (Ray Gun).
+        legendary_reveal_01: {
+            path: "audio/sfx/legendary_reveal_01.mp3",
+            volume: 1,
+        },
         //ray gun explosion
         ray_gun_explosion: {
             path: "audio/sfx/ray_gun_explosion.mp3",
