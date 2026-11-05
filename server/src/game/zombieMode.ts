@@ -116,6 +116,9 @@ export const ZombieMysteryBoxWeapons = [
 
 export type ZombieMysteryBoxWeapon = typeof ZombieMysteryBoxWeapons[number];
 
+/** The only throwables Max Ammo refills in Zombies. Everything else is left as-is. */
+export const ZombieMaxAmmoThrowables: readonly string[] = ["frag", "mirv"];
+
 /**
  * Ray Gun (wonder weapon). The box rolls it at `boxChance`; the other box guns
  * split the rest evenly. A player can't roll it while holding one or while a

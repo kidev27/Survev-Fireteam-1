@@ -86,6 +86,29 @@ test("Max Ammo refills every living operator without changing loaded magazines",
     }
 });
 
+test("Zombies: players start without throwables; Max Ammo refills only frags and MIRVs", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+
+    const throwables = Object.keys(player.invManager.items).filter(
+        (item) => GameObjectDefs.typeToDefSafe(item)?.type === "throwable",
+    ) as Array<keyof typeof player.invManager.items>;
+    expect(throwables.length).toBeGreaterThan(2);
+    for (const item of throwables) expect(player.invManager.get(item)).toBe(0);
+
+    game.specOps!.activateZombiePowerUp("zombie_powerup_max_ammo");
+    for (const item of throwables) {
+        const expected = item === "frag" || item === "mirv" ? player.invManager.getMaxCapacity(item) : 0;
+        expect(player.invManager.get(item), item).toBe(expected);
+    }
+
+    // Throwables a player already owns (e.g. bought strobes) are left alone, not topped up.
+    player.invManager.set("strobe", 1);
+    game.specOps!.activateZombiePowerUp("zombie_powerup_max_ammo");
+    expect(player.invManager.get("strobe")).toBe(1);
+});
+
 test("Insta-Kill one-shots walkers, doubles elite damage, and expires for the team", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });

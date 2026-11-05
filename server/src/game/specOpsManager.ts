@@ -139,6 +139,7 @@ import {
     ZombieMysteryBoxCycleInterval,
     ZombieMysteryBoxRelocateUses,
     ZombieMysteryBoxRollDuration,
+    ZombieMaxAmmoThrowables,
     ZombieMysteryBoxWeapons,
     ZombieRayGun,
     ZombieUpgradeCost,
@@ -5875,6 +5876,7 @@ export class SpecOpsManager implements PracticeHost {
         for (const player of this.livingHumans()) {
             for (const item of Object.keys(player.invManager.items) as InventoryItem[]) {
                 const def = GameObjectDefs.typeToDef(item);
+                if (def.type === "throwable" && !ZombieMaxAmmoThrowables.includes(item)) continue;
                 if (def.type !== "ammo" && def.type !== "throwable") continue;
                 player.invManager.set(item, player.invManager.getMaxCapacity(item));
             }
