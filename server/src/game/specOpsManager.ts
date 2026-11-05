@@ -8181,6 +8181,13 @@ export class SpecOpsManager implements PracticeHost {
         return player;
     }
 
+    /** Dev cheat: set a human's cash exactly (clamped to the cash cap; not counted as earned). */
+    setCashForDebug(player: Player, amount: number): void {
+        if (player.specOpsAi) return;
+        player.specOpsCash = math.clamp(Math.floor(amount), 0, SpecOpsCashCap);
+        player.specOpsCashDirty = true;
+    }
+
     grantCash(player: Player, amount: number, dirty = true, earned = true): void {
         if (amount === 0 || player.specOpsAi) return;
         // Lifetime "cash earned" for the hold-Tab scoreboard (refunds/starting cash opt out).

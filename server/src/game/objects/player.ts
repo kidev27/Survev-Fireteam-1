@@ -5087,6 +5087,12 @@ export class Player extends BaseGameObject {
         ) {
             this.game.specOps.jumpToWave(msg.setWave);
         }
+
+        if ((msg.setCash >= 0 || msg.addCash > 0) && this.game.specOps) {
+            const target = msg.setCash >= 0 ? msg.setCash : this.specOpsCash + msg.addCash;
+            this.game.specOps.setCashForDebug(this, target);
+            this.game.logger.info(`[cheat] Set cash=${this.specOpsCash} for ${this.name}`);
+        }
         // ────────────────────────────────────────────────────────────────────
     }
 

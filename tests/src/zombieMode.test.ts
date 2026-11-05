@@ -1217,3 +1217,43 @@ test("Ray Gun: the box reveal plays the legendary burst", () => {
     const prize = game.lootBarn.loots.find((loot) => loot.mysteryBoxId === box.__id && !loot.destroyed)!;
     expect(prize.type).toBe(ZombieRayGun.type);
 });
+
+test("Dev cheat: set and add cash (clamped to the cap, not counted as earned)", async () => {
+    const { Config } = await import("../../server/src/config.ts");
+    const { EditMsg } = await import("../../shared/net/editMsg.ts");
+    const { SpecOpsCashCap } = await import("../../shared/defs/maps/specOpsShop.ts");
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "Dev" });
+    game.update(0.1);
+    const allow = Config.debug.allowEditMsg;
+    Config.debug.allowEditMsg = true;
+    try {
+        const earned = player.specOpsCashEarned;
+        const send = (setCash: number, addCash: number) => {
+            const msg = new EditMsg();
+            msg.setCash = setCash;
+            msg.addCash = addCash;
+            player.processEditMsg(msg);
+        };
+        send(25000, 0);
+        expect(player.specOpsCash).toBe(25000);
+        send(-1, 5000);
+        expect(player.specOpsCash).toBe(30000);
+        send(0, 0);
+        expect(player.specOpsCash).toBe(0);
+        send(SpecOpsCashCap + 999, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+        expect(player.specOpsCashEarned).toBe(earned);
+
+        // A plain edit message (no cash fields) leaves cash alone.
+        send(-1, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+
+        // With edit messages disabled (prod), cheats do nothing.
+        Config.debug.allowEditMsg = false;
+        send(100, 0);
+        expect(player.specOpsCash).toBe(SpecOpsCashCap);
+    } finally {
+        Config.debug.allowEditMsg = allow;
+    }
+});

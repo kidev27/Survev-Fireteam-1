@@ -41,6 +41,10 @@ export class EditMsg implements AbstractMsg {
     setWave = 0;
     /** Set player health to this value (0 = no change, >0 valid). */
     setHealth = 0;
+    /** Spec Ops / Zombies: set this player's cash to exactly this (-1 = no change). */
+    setCash = -1;
+    /** Spec Ops / Zombies: add this much cash (0 = no change). */
+    addCash = 0;
     // ─────────────────────────────────────────────────────────────────────────
 
     serialize(s: BitStream) {
@@ -93,6 +97,10 @@ export class EditMsg implements AbstractMsg {
         s.writeUint16(Math.max(0, Math.min(999, this.giveItemCount)));
         s.writeUint8(Math.max(0, Math.min(30, this.setWave)));
         s.writeUint16(Math.max(0, Math.min(65535, this.setHealth)));
+        s.writeBoolean(this.setCash >= 0);
+        if (this.setCash >= 0) s.writeUint32(Math.min(this.setCash, 0xffffffff));
+        s.writeBoolean(this.addCash > 0);
+        if (this.addCash > 0) s.writeUint32(Math.min(this.addCash, 0xffffffff));
     }
 
     deserialize(s: BitStream) {
@@ -149,5 +157,7 @@ export class EditMsg implements AbstractMsg {
         this.giveItemCount = s.readUint16();
         this.setWave = s.readUint8();
         this.setHealth = s.readUint16();
+        this.setCash = s.readBoolean() ? s.readUint32() : -1;
+        this.addCash = s.readBoolean() ? s.readUint32() : 0;
     }
 }
