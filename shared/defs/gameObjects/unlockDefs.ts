@@ -18,7 +18,8 @@ export interface UnlockDef {
 /** Every outfit, melee skin, heal particle, and boost particle for the loadout menu. */
 function loadoutCosmeticUnlocks(): string[] {
     const items: string[] = [];
-    for (const type of Object.keys(OutfitDefs)) {
+    for (const [type, def] of Object.entries(OutfitDefs)) {
+        if (def.aiOnly) continue;
         items.push(type);
     }
     for (const [type, def] of Object.entries(MeleeDefs)) {

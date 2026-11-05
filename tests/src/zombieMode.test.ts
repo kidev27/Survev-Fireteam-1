@@ -1021,3 +1021,21 @@ test("Zombies only ever spawns zombies: no soldiers, bosses, or Ironclads", () =
         expect(enemy.specOpsSuicideVest).toBe(false);
     }
 });
+
+test("Normal zombies wear one of the three zombie bodies, which players can't equip", async () => {
+    const { UnlockDefs } = await import("../../shared/defs/gameObjects/unlockDefs.ts");
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    game.playerBarn.addTestPlayer({ name: "Operator" });
+    game.update(0.1);
+    const ops = game.specOps!;
+    const zombieBodies = ["outfitZombie01", "outfitZombie02", "outfitZombie03"];
+    for (const body of zombieBodies) {
+        const def = GameObjectDefs.typeToDef(body, "outfit");
+        expect(def.skinImg.baseSprite).toBe(`player-base-zombie-${body.slice(-2)}.img`);
+        expect(UnlockDefs.unlock_default.unlocks).not.toContain(body);
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) seen.add(ops.spawnEnemyPublic("zombie_walker").outfit);
+    for (const outfit of seen) expect(zombieBodies).toContain(outfit);
+    expect(seen.size).toBeGreaterThan(1);
+});

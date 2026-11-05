@@ -30,9 +30,9 @@ export const ZombieLoadouts: Record<ZombieClass, ZombieLoadout> = {
     zombie_walker: {
         name: "Zombie",
         gun: "",
-        // Existing Survev outfits are placeholders until custom art is ready.
-        outfits: ["outfitDarkShirt", "outfitKhaki", "outfitWoodland"],
-        outfit: "outfitDarkShirt",
+        // Three normal-zombie body variants so a horde doesn't look copy-pasted.
+        outfits: ["outfitZombie01", "outfitZombie02", "outfitZombie03"],
+        outfit: "outfitZombie01",
         chest: "",
         helmet: "",
         backpack: "backpack00",
