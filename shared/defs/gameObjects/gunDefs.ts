@@ -1,6 +1,16 @@
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
-import { packAPunchType, ZombiePackAPunchColors, ZombiePackAPunchNames } from "../maps/zombiePackAPunch.ts";
+import {
+    packAPunchArcBulletType,
+    packAPunchBulletType,
+    packAPunchType,
+    ZombiePackAPunchArcBullet,
+    ZombiePackAPunchColors,
+    ZombiePackAPunchNames,
+    ZombiePackAPunchSpecials,
+    ZombiePackAPunchTracer,
+} from "../maps/zombiePackAPunch.ts";
+import { type BulletDef, BulletDefs } from "./bulletDefs.ts";
 
 export interface GunDef {
     readonly type: "gun";
@@ -94,6 +104,12 @@ export interface GunDef {
     noCasing?: boolean;
     /** Zombies Pack-a-Punch upgraded gun (generated `<gun>_pap` type). */
     zombieUpgraded?: boolean;
+    /**
+     * Pack-a-Punch "variableFireRate" special (HAMR style): after each reload the
+     * first `fastShots` shots use `fastFireDelay`, easing back to `fireDelay`
+     * over `rampShots` shots. Set from ZombiePackAPunchSpecials.
+     */
+    variableFireRate?: { fastFireDelay: number; fastShots: number; rampShots: number };
     burstDelay?: number;
     burstCount?: number;
     dualWieldType?: string;
@@ -3743,14 +3759,69 @@ const SkinDefs: Record<string, GunDef> = {
 
 export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
 
+/**
+ * Mark II bullet: the original bullet with a purple tracer, 1.2x thicker. Single
+ * bullets also get a cyan-white plasma core and a spark trail; shotgun pellets
+ * skip those to keep many-pellet shots light. Damage, speed and range are unchanged.
+ */
+/** Per-gun copy of the chain-lightning arc bullet with that gun's arc duration. */
+function packAPunchArcBullet(gun: string, life: number): string {
+    const type = packAPunchArcBulletType(gun);
+    BulletDefs[type] = { ...BulletDefs[ZombiePackAPunchArcBullet], chainArc: { life } };
+    return type;
+}
+
+function packAPunchBullet(bulletType: string, pellets: boolean, special?: string): string {
+    // Guns with a piercing / chain special get their own bullet so the effect
+    // can't leak to another gun that shares the original bullet type.
+    const type = special ? packAPunchBulletType(bulletType, special) : packAPunchBulletType(bulletType);
+    if (BulletDefs[type]) return type;
+    const bullet = BulletDefs[bulletType];
+    if (!bullet) throw new Error(`Pack-a-Punch: unknown bullet ${bulletType}`);
+    const upgraded: BulletDef = {
+        ...bullet,
+        tracerColor: "pap",
+        tracerWidth: bullet.tracerWidth * ZombiePackAPunchTracer.widthMult,
+    };
+    if (!pellets) {
+        upgraded.tracerCore = {
+            color: ZombiePackAPunchColors.tracerCore,
+            widthMult: ZombiePackAPunchTracer.coreWidthMult,
+        };
+        upgraded.sparkTrail = true;
+    }
+    const gunSpecial = special ? ZombiePackAPunchSpecials[special] : undefined;
+    if (gunSpecial?.kind === "pierce") {
+        upgraded.pierce = { maxTargets: gunSpecial.maxTargets, damageFalloff: gunSpecial.damageFalloff };
+    } else if (gunSpecial?.kind === "chain") {
+        upgraded.chain = {
+            maxJumps: gunSpecial.maxJumps,
+            range: gunSpecial.range,
+            damageMult: gunSpecial.damageMult,
+            arcBullet: packAPunchArcBullet(special!, gunSpecial.arcLife),
+            ...(gunSpecial.chainEvery ? { chainEvery: gunSpecial.chainEvery } : {}),
+            ...(gunSpecial.stun ? { stun: gunSpecial.stun } : {}),
+            ...(gunSpecial.stunEvery ? { stunEvery: gunSpecial.stunEvery } : {}),
+        };
+    }
+    BulletDefs[type] = upgraded;
+    return type;
+}
+
 // Zombies Pack-a-Punch: an upgraded twin for every gun in ZombiePackAPunchNames
 // (names live in shared/defs/maps/zombiePackAPunch.ts). Damage and magazine
 // bonuses are applied in WeaponManager from the `zombieUpgraded` flag.
+for (const base of Object.keys(ZombiePackAPunchSpecials)) {
+    if (!(base in ZombiePackAPunchNames)) throw new Error(`Pack-a-Punch special for non-upgradable gun ${base}`);
+}
 for (const [base, name] of Object.entries(ZombiePackAPunchNames)) {
     const def = GunDefs[base];
     if (!def) throw new Error(`Pack-a-Punch: unknown gun ${base}`);
+    const special = ZombiePackAPunchSpecials[base];
+    const bulletSpecial = special?.kind === "pierce" || special?.kind === "chain" ? base : undefined;
     const upgraded: GunDef = util.mergeDeep({}, def, {
         name,
+        bulletType: packAPunchBullet(def.bulletType, def.bulletCount > 1, bulletSpecial),
         quality: 1,
         zombieUpgraded: true,
         lootImg: {
@@ -3761,5 +3832,18 @@ for (const [base, name] of Object.entries(ZombiePackAPunchNames)) {
     });
     // A Mark II pistol must not merge with a normal pistol into a dual-wield pair.
     delete upgraded.dualWieldType;
+    if (special?.kind === "burstToAuto") {
+        upgraded.fireMode = "auto";
+        upgraded.fireDelay = special.fireDelay;
+        delete upgraded.burstCount;
+        delete upgraded.burstDelay;
+        delete upgraded.burstSounds;
+    } else if (special?.kind === "variableFireRate") {
+        upgraded.variableFireRate = {
+            fastFireDelay: special.fastFireDelay,
+            fastShots: special.fastShots,
+            rampShots: special.rampShots,
+        };
+    }
     GunDefs[packAPunchType(base)] = upgraded;
 }

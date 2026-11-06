@@ -3799,6 +3799,8 @@ export class Player extends BaseGameObject {
     moveDown = false;
     shootStart = false;
     shootHold = false;
+    /** Goes up on every new trigger press (used to tell one continuous hold from tap-firing). */
+    triggerPressId = 0;
     portrait = false;
 
     touchMoveActive = false;
@@ -3849,6 +3851,9 @@ export class Player extends BaseGameObject {
         this.touchMoveLen = msg.touchMoveLen;
         this.toMouseLen = msg.toMouseLen;
 
+        if (msg.shootStart || (msg.shootHold && !this.shootHold)) {
+            this.triggerPressId++;
+        }
         this.shootHold = msg.shootHold;
 
         if (msg.shootStart) {

@@ -22,6 +22,7 @@ import {
 import { Editor } from "./debug/editor.ts";
 /* STRIP_FROM_PROD_CLIENT:END */
 
+import { packAPunchSpecialFor } from "../../shared/defs/maps/zombiePackAPunch.ts";
 import { isZombiePowerUpType } from "../../shared/defs/maps/zombiePowerUps.ts";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { SpectateAction } from "../../shared/net/spectateMsg.ts";
@@ -1870,6 +1871,12 @@ export class Game {
                         this.m_uiManager.displayAnnouncement(
                             this.m_localization.translate(`game-${msg.item}`),
                         );
+                    }
+                    // Mark II specials are only explained when the gun is picked up.
+                    const papSpecial = packAPunchSpecialFor(msg.item);
+                    if (papSpecial) {
+                        const name = this.m_localization.translate(`game-${msg.item}`);
+                        this.m_ui2Manager.displayPickupText(`${name}: ${papSpecial.label}`);
                     }
                 } else {
                     this.m_ui2Manager.displayPickupMessage(msg.type);

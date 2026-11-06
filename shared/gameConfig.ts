@@ -151,7 +151,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1032,
+    protocolVersion: 1035,
     Action,
     Anim,
     DamageType,
@@ -372,6 +372,13 @@ export const GameConfig = {
             saturated: 0xfff088,
             chambered: 0xffdf00,
             apSaturated: 0xff8000,
+        },
+        // Zombies Pack-a-Punch Mark II tracers (head glow is cyan-white).
+        pap: {
+            regular: 0x9b6bff,
+            saturated: 0x8a5cff,
+            chambered: 0xb48cff,
+            apSaturated: 0x7a4bdf,
         },
         raygun: {
             regular: 0x7dff6b,

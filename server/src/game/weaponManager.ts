@@ -57,6 +57,8 @@ export class WeaponManager {
         ammo: number;
         cooldown: number;
         recoilTime: number;
+        /** Shots fired since the last reload (Pack-a-Punch variable fire rate). */
+        shotsSinceReload: number;
     }> = [];
 
     scheduledReload = false;
@@ -95,6 +97,7 @@ export class WeaponManager {
                 ammo: 0,
                 cooldown: 0,
                 recoilTime: Infinity,
+                shotsSinceReload: 0,
             });
         }
     }
@@ -283,6 +286,7 @@ export class WeaponManager {
         this.weapons[idx].type = type;
         this.weapons[idx].cooldown = 0;
         this.weapons[idx].ammo = ammo;
+        this.weapons[idx].shotsSinceReload = 0;
         if (weaponDef?.type === "gun") {
             this.weapons[idx].recoilTime = weaponDef.recoilTime;
         }
@@ -746,6 +750,7 @@ export class WeaponManager {
         }
 
         weapon.ammo += amountToReload;
+        weapon.shotsSinceReload = 0;
 
         // reload again if we still have ammo in the inventory but didnt fill the weapon
         // for single reload shotguns (active hand only — offhand loops via ensureOffhandReload)
@@ -880,6 +885,22 @@ export class WeaponManager {
         return totalDamageMult;
     }
 
+    /**
+     * Delay before the next shot. Normally the gun's fireDelay; a Pack-a-Punch
+     * "variableFireRate" gun fires its first shots after a reload faster, then
+     * eases back to fireDelay.
+     */
+    static shotFireDelay(
+        itemDef: { fireDelay: number; variableFireRate?: GunDef["variableFireRate"] },
+        shotsSinceReload: number,
+    ): number {
+        const vfr = itemDef.variableFireRate;
+        if (!vfr) return itemDef.fireDelay;
+        if (shotsSinceReload < vfr.fastShots) return vfr.fastFireDelay;
+        const t = math.clamp((shotsSinceReload - vfr.fastShots) / Math.max(1, vfr.rampShots), 0, 1);
+        return math.lerp(t, vfr.fastFireDelay, itemDef.fireDelay);
+    }
+
     fireWeapon(offHand: boolean, forceFire?: boolean) {
         const itemDef = GameObjectDefs.typeToDef(this.activeWeapon, "gun");
 
@@ -890,7 +911,9 @@ export class WeaponManager {
 
         const firstShotAccuracy = weapon.recoilTime <= 0;
 
-        weapon.cooldown = itemDef.fireDelay;
+        const fireDelay = WeaponManager.shotFireDelay(itemDef, weapon.shotsSinceReload);
+        weapon.shotsSinceReload++;
+        weapon.cooldown = fireDelay;
         weapon.recoilTime = itemDef.recoilTime;
 
         // Check firing location
@@ -904,7 +927,7 @@ export class WeaponManager {
         const direction = this.player.dir;
         const toMouseLen = this.player.toMouseLen;
 
-        this.player.shotSlowdownTimer = itemDef.fireDelay;
+        this.player.shotSlowdownTimer = fireDelay;
 
         this.player.cancelAction();
 

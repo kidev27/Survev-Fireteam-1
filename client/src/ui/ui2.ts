@@ -1513,6 +1513,14 @@ export class UiManager2 {
         p.duration = 3;
     }
 
+    /** Free-form pickup line (same slot as the pickup messages). Text is escaped. */
+    displayPickupText(text: string) {
+        const p = this.newState.pickupMessage;
+        p.message = helpers.htmlEscape(text);
+        p.ticker = 0;
+        p.duration = 4;
+    }
+
     displayKillMessage(text: string, count: string) {
         const p = this.newState.killMessage;
         p.text = text;

@@ -37,6 +37,111 @@ export const ZombiePackAPunchNames: Record<string, string> = {
     qbb97: "Quantum Bullet Barrage",
 };
 
+/**
+ * PACK-A-PUNCH SPECIALS. A few guns get a signature upgrade on top of the normal
+ * Mark II bonus. To give a gun a special, move one, or remove one, edit this table:
+ * the key is the original gun type, the value one of the kinds below. Guns not
+ * listed stay stats-only. `label` is shown once when the Mark II gun is picked up.
+ *
+ * - burstToAuto: a burst gun becomes full-auto at `fireDelay` seconds per shot.
+ * - variableFireRate: after each reload, the first `fastShots` shots fire at
+ *   `fastFireDelay`, then the delay eases back to the gun's normal rate over
+ *   `rampShots` more shots (HAMR style).
+ * - pierce: a bullet hits up to `maxTargets` zombies in a line, losing
+ *   `damageFalloff` of its damage at each one.
+ * - chain: a hit arcs from zombie to zombie up to `maxJumps` times (each jump to
+ *   the nearest unhit zombie within `range`), dealing `damageMult` of the hit.
+ *   `arcLife`: seconds each lightning arc stays on screen (visual only).
+ *   Optional `chainEvery`: only every Nth hit of one continuous trigger hold
+ *   arcs (default 1 = every hit). Optional `stun`: the hit zombie and every
+ *   zombie it arcs to freeze for that many seconds. Optional `stunEvery`: only
+ *   every Nth hit of one hold stuns (default 1 = every hit); a stunning hit
+ *   always arcs. For both counts, releasing the trigger (tap firing) or going
+ *   ZombiePackAPunchStunStreakReset seconds without a hit restarts the count.
+ *   A zombie can't be re-stunned until
+ *   ZombiePackAPunchStunImmunity seconds after its last stun wore off.
+ */
+export type ZombiePackAPunchSpecial =
+    | { kind: "burstToAuto"; label: string; fireDelay: number }
+    | {
+        kind: "variableFireRate";
+        label: string;
+        fastFireDelay: number;
+        fastShots: number;
+        rampShots: number;
+    }
+    | { kind: "pierce"; label: string; maxTargets: number; damageFalloff: number }
+    | {
+        kind: "chain";
+        label: string;
+        maxJumps: number;
+        range: number;
+        damageMult: number;
+        arcLife: number;
+        chainEvery?: number;
+        stun?: number;
+        stunEvery?: number;
+    };
+
+export const ZombiePackAPunchSpecials: Record<string, ZombiePackAPunchSpecial> = {
+    famas: { kind: "burstToAuto", label: "Full-auto: burst fire becomes automatic", fireDelay: 0.08 },
+    ump9: { kind: "burstToAuto", label: "Full-auto: burst fire becomes automatic", fireDelay: 0.09 },
+    m249: {
+        kind: "variableFireRate",
+        label: "Overdrive: first shots of every mag fire twice as fast",
+        fastFireDelay: 0.04,
+        fastShots: 15,
+        rampShots: 10,
+    },
+    sv98: { kind: "pierce", label: "Piercing: hits up to 4 zombies in a line", maxTargets: 4, damageFalloff: 0.15 },
+    deagle: { kind: "pierce", label: "Piercing: hits up to 2 zombies in a line", maxTargets: 2, damageFalloff: 0.2 },
+    awc: {
+        kind: "chain",
+        label: "Chain lightning: arcs to 3 more zombies and stuns them",
+        maxJumps: 3,
+        range: 6,
+        damageMult: 0.4,
+        arcLife: 0.7,
+        stun: 0.5,
+    },
+    vector: {
+        kind: "chain",
+        label: "Chain lightning: arcs to 1 more zombie, every 10th hit stuns",
+        maxJumps: 1,
+        range: 5,
+        damageMult: 0.39,
+        arcLife: 0.3,
+        chainEvery: 4,
+        stun: 0.3,
+        stunEvery: 10,
+    },
+};
+
+/**
+ * Seconds after a chain-lightning stun wears off before that zombie can be
+ * stunned again, so fast guns can't keep a zombie frozen.
+ */
+export const ZombiePackAPunchStunImmunity = 0.75;
+
+/**
+ * For `stunEvery` guns: going this many seconds without landing a hit resets
+ * the hit count, even while the trigger is held (releasing it always resets).
+ */
+export const ZombiePackAPunchStunStreakReset = 0.75;
+
+/** Template for the visual-only bullet sent per chain-lightning hop. */
+export const ZombiePackAPunchArcBullet = "bullet_pap_arc";
+
+/** Per-gun chain arc bullet (carries that gun's `arcLife` to clients). */
+export function packAPunchArcBulletType(gun: string): string {
+    return `${ZombiePackAPunchArcBullet}_${gun}`;
+}
+
+/** Special for a Mark II gun type; undefined for normal guns and stats-only Mark IIs. */
+export function packAPunchSpecialFor(gunType: string): ZombiePackAPunchSpecial | undefined {
+    return isPackAPunchType(gunType) ? ZombiePackAPunchSpecials[packAPunchBaseType(gunType)] : undefined;
+}
+
 /** Upgrade stats (unchanged from the old workbench). */
 export const ZombiePackAPunchStats = {
     cost: 5000,
@@ -48,11 +153,23 @@ export const ZombiePackAPunchStats = {
     claimTime: 15,
 } as const;
 
-/** Upgraded guns' floor/HUD glow and camo colors (client only). */
+/** Upgraded guns' floor/HUD glow, camo and tracer colors (client only). */
 export const ZombiePackAPunchColors = {
     glow: 0x9b6bff,
     camoA: 0x8a5cff,
     camoB: 0x4fe3ff,
+    /** Cyan-white "plasma core" inside a Mark II tracer (the trail is GameConfig.tracerColors.pap). */
+    tracerCore: 0xd9faff,
+} as const;
+
+/**
+ * Mark II tracers (client only; damage, speed and range match the original bullet).
+ * Shotgun pellets get the color and thickness but no plasma core or spark trail.
+ */
+export const ZombiePackAPunchTracer = {
+    widthMult: 1.2,
+    /** Plasma core width as a fraction of the (already 1.2x) trail width. */
+    coreWidthMult: 0.38,
 } as const;
 
 /** Map object type of the machine (Last Call). */
@@ -78,6 +195,14 @@ export function packAPunchArtOffset(p: { x: number; y: number }): { x: number; y
 }
 
 const Suffix = "_pap";
+
+/**
+ * Mark II copy of a bullet type, e.g. `bullet_ak47` -> `bullet_ak47_pap`. Guns with a
+ * piercing / chain special get their own copy: `bullet_awc` + `awc` -> `bullet_awc_pap_awc`.
+ */
+export function packAPunchBulletType(bulletType: string, specialGun?: string): string {
+    return specialGun ? `${bulletType}${Suffix}_${specialGun}` : `${bulletType}${Suffix}`;
+}
 
 export function packAPunchType(base: string): string {
     return `${base}${Suffix}`;
