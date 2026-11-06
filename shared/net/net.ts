@@ -317,6 +317,8 @@ export enum PickupMsgType {
     Success,
     GunCannotFire,
     MaxPerks,
+    /** Zombies: this player has used all of a perk's buys (`item` is the perk). */
+    PerkNoUsesLeft,
 }
 
 export class UpdatePassMsg {

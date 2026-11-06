@@ -5777,6 +5777,8 @@ export class SpecOpsManager implements PracticeHost {
     private huntClock = 0;
     private airstrikeCooldown = 0;
     private buyCooldown = new Map<number, number>();
+    /** Zombies perk buys per player id and perk, for machines with `maxBuys`. */
+    private zombiePerkBuys = new Map<number, Map<string, number>>();
     private carePackageCooldown = 0;
     /** Ironclads summoned by human IR strobe spam this wave. */
     private ironcladsThisWave = 0;
@@ -6548,6 +6550,11 @@ export class SpecOpsManager implements PracticeHost {
             )
         ) return false;
         if (player.hasPerk(offer.perk) || player.perks.length >= SpecOpsMaxPerks) return false;
+        if (offer.maxBuys !== undefined && this.zombiePerkBuyCount(player, offer.perk) >= offer.maxBuys) {
+            this.sendPickupMsg(player, net.PickupMsgType.PerkNoUsesLeft, offer.perk);
+            this.buyCooldown.set(player.__id, 0.45);
+            return false;
+        }
         if (player.specOpsCash < offer.cost) return false;
 
         const previousMaxHealth = player.maxHealth;
@@ -6559,7 +6566,58 @@ export class SpecOpsManager implements PracticeHost {
         this.grantCash(player, -offer.cost);
         this.buyCooldown.set(player.__id, 0.45);
         this.game.playerBarn.addEmote("emote_loot", player.__id, offer.perk);
+
+        if (offer.maxBuys !== undefined) {
+            const bought = this.zombiePerkBuyCount(player, offer.perk) + 1;
+            let perPlayer = this.zombiePerkBuys.get(player.__id);
+            if (!perPlayer) {
+                perPlayer = new Map();
+                this.zombiePerkBuys.set(player.__id, perPlayer);
+            }
+            perPlayer.set(offer.perk, bought);
+            // Solo: the machine powers down once its last buy is used.
+            if (bought >= offer.maxBuys && this.humanPlayerCount() <= 1) {
+                this.powerDownZombiePerkMachine(machine);
+            }
+        }
         return true;
+    }
+
+    /** How many times this player has bought `perk` this game. */
+    zombiePerkBuyCount(player: Player, perk: string): number {
+        return this.zombiePerkBuys.get(player.__id)?.get(perk) ?? 0;
+    }
+
+    /** Humans in the game (alive, downed or dead), not counting AI. */
+    private humanPlayerCount(): number {
+        let count = 0;
+        const players = this.game.playerBarn.players;
+        for (let i = 0; i < players.length; i++) {
+            if (!players[i].specOpsAi) count++;
+        }
+        return count;
+    }
+
+    /** Dark sprite, no use prompt, and its floor glow removed. */
+    private powerDownZombiePerkMachine(machine: Obstacle): void {
+        if (!machine.button) return;
+        machine.button.canUse = false;
+        machine.setDirty();
+        const glowType = machine.type.replace("zombie_perk_machine_", "zombie_perk_glow_");
+        for (const decal of this.game.decalBarn.decals) {
+            if (decal.type === glowType && v2.lengthSqr(v2.sub(decal.pos, machine.pos)) < 16) {
+                decal.lifeTime = 0;
+            }
+        }
+    }
+
+    private sendPickupMsg(player: Player, type: net.PickupMsgType, item: string): void {
+        if (player.specOpsAi || player.disconnected) return;
+        const msg = new net.PickupMsg();
+        msg.type = type;
+        msg.item = item;
+        msg.count = 1;
+        player.client.sendMsg(net.MsgType.Pickup, msg);
     }
 
     /**
