@@ -2252,6 +2252,26 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.31, util.random(0.55, 0.7), 1));
         },
     },
+    // Pack-a-Punch Mark II tracers: tiny purple/cyan sparks shed behind the bullet.
+    papTrailSpark: {
+        image: ["part-spark-02.img"],
+        life: new Range(0.18, 0.32),
+        drag: new Range(3, 5),
+        rotVel: new Range(-6, 6),
+        scale: {
+            start: new Range(0.05, 0.08),
+            end: 0.01,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.4, 1),
+        },
+        color: function() {
+            return Math.random() < 0.6 ? 0x9b6bff : 0x6fe8ff;
+        },
+    },
     // Pack-a-Punch: rings pulsing out of the machine's core while it works.
     papRing: {
         image: ["part-pap-ring-01.img"],

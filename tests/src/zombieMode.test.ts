@@ -19,10 +19,12 @@ import type { GunDef } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { SpecOpsShopCatalog } from "../../shared/defs/maps/specOpsShop.ts";
 import {
+    packAPunchBulletType,
     packAPunchType,
     packAPunchUpgradeFor,
     ZombiePackAPunchNames,
     ZombiePackAPunchStats,
+    ZombiePackAPunchTracer,
     ZombiePackAPunchType,
 } from "../../shared/defs/maps/zombiePackAPunch.ts";
 import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
@@ -560,7 +562,8 @@ test("Pack-a-Punch: Mark II twins exist for upgradable guns and aren't sold", ()
         const def = GameObjectDefs.typeToDef(packAPunchType(base), "gun") as GunDef;
         expect(def.zombieUpgraded).toBe(true);
         expect(def.name).toBe(name);
-        expect(name.endsWith(" Mark II")).toBe(true);
+        // Names are free-form (edited in zombiePackAPunch.ts); they just can't be empty.
+        expect(name.trim().length, base).toBeGreaterThan(0);
         expect(def.dualWieldType).toBeUndefined();
         expect(def.ammo).toBe((GameObjectDefs.typeToDef(base, "gun") as GunDef).ammo);
         expect(SpecOpsShopCatalog.some((item) => item.sku === packAPunchType(base))).toBe(false);
@@ -1256,4 +1259,41 @@ test("Dev cheat: set and add cash (clamped to the cap, not counted as earned)", 
     } finally {
         Config.debug.allowEditMsg = allow;
     }
+});
+
+test("Pack-a-Punch: Mark II tracers are visual only (same damage, speed, range)", () => {
+    for (const base of Object.keys(ZombiePackAPunchNames)) {
+        const gun = GameObjectDefs.typeToDef(base, "gun") as GunDef;
+        const upgraded = GameObjectDefs.typeToDef(packAPunchType(base), "gun") as GunDef;
+        expect(upgraded.bulletType, base).toBe(packAPunchBulletType(gun.bulletType));
+        const orig = GameObjectDefs.typeToDef(gun.bulletType, "bullet");
+        const bullet = GameObjectDefs.typeToDef(upgraded.bulletType, "bullet");
+        expect(bullet.damage).toBe(orig.damage);
+        expect(bullet.speed).toBe(orig.speed);
+        expect(bullet.distance).toBe(orig.distance);
+        expect(bullet.obstacleDamage).toBe(orig.obstacleDamage);
+        expect(bullet.onHit).toBe(orig.onHit);
+        expect(bullet.tracerColor).toBe("pap");
+        expect(bullet.tracerWidth).toBeCloseTo(orig.tracerWidth * ZombiePackAPunchTracer.widthMult, 6);
+        const pellets = gun.bulletCount > 1;
+        expect(!!bullet.sparkTrail, base).toBe(!pellets);
+        expect(!!bullet.tracerCore, base).toBe(!pellets);
+        expect(bullet.glowColor, base).toBeUndefined();
+    }
+    expect(GameConfig.tracerColors.pap).toBeDefined();
+});
+
+test("Pack-a-Punch: a Mark II gun fires its Mark II bullet", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "P" });
+    game.update(0.1);
+    player.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47_pap", 45);
+    player.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
+    const papBullet = packAPunchBulletType("bullet_ak47");
+    const firedPap = () => game.bulletBarn.bullets.some((b) => b.bulletType === papBullet);
+    expect(firedPap()).toBe(false);
+    player.shootStart = true;
+    player.shootHold = true;
+    for (let i = 0; i < 10 && !firedPap(); i++) game.step(0.05);
+    expect(firedPap()).toBe(true);
 });

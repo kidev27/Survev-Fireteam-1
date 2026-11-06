@@ -48,11 +48,23 @@ export const ZombiePackAPunchStats = {
     claimTime: 15,
 } as const;
 
-/** Upgraded guns' floor/HUD glow and camo colors (client only). */
+/** Upgraded guns' floor/HUD glow, camo and tracer colors (client only). */
 export const ZombiePackAPunchColors = {
     glow: 0x9b6bff,
     camoA: 0x8a5cff,
     camoB: 0x4fe3ff,
+    /** Cyan-white "plasma core" inside a Mark II tracer (the trail is GameConfig.tracerColors.pap). */
+    tracerCore: 0xd9faff,
+} as const;
+
+/**
+ * Mark II tracers (client only; damage, speed and range match the original bullet).
+ * Shotgun pellets get the color and thickness but no plasma core or spark trail.
+ */
+export const ZombiePackAPunchTracer = {
+    widthMult: 1.2,
+    /** Plasma core width as a fraction of the (already 1.2x) trail width. */
+    coreWidthMult: 0.38,
 } as const;
 
 /** Map object type of the machine (Last Call). */
@@ -78,6 +90,11 @@ export function packAPunchArtOffset(p: { x: number; y: number }): { x: number; y
 }
 
 const Suffix = "_pap";
+
+/** Mark II copy of a bullet type, e.g. `bullet_ak47` -> `bullet_ak47_pap`. */
+export function packAPunchBulletType(bulletType: string): string {
+    return `${bulletType}${Suffix}`;
+}
 
 export function packAPunchType(base: string): string {
     return `${base}${Suffix}`;

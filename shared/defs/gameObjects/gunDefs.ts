@@ -1,6 +1,13 @@
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
-import { packAPunchType, ZombiePackAPunchColors, ZombiePackAPunchNames } from "../maps/zombiePackAPunch.ts";
+import {
+    packAPunchBulletType,
+    packAPunchType,
+    ZombiePackAPunchColors,
+    ZombiePackAPunchNames,
+    ZombiePackAPunchTracer,
+} from "../maps/zombiePackAPunch.ts";
+import { type BulletDef, BulletDefs } from "./bulletDefs.ts";
 
 export interface GunDef {
     readonly type: "gun";
@@ -3743,6 +3750,32 @@ const SkinDefs: Record<string, GunDef> = {
 
 export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
 
+/**
+ * Mark II bullet: the original bullet with a purple tracer, 1.2x thicker. Single
+ * bullets also get a cyan-white plasma core and a spark trail; shotgun pellets
+ * skip those to keep many-pellet shots light. Damage, speed and range are unchanged.
+ */
+function packAPunchBullet(bulletType: string, pellets: boolean): string {
+    const type = packAPunchBulletType(bulletType);
+    if (BulletDefs[type]) return type;
+    const bullet = BulletDefs[bulletType];
+    if (!bullet) throw new Error(`Pack-a-Punch: unknown bullet ${bulletType}`);
+    const upgraded: BulletDef = {
+        ...bullet,
+        tracerColor: "pap",
+        tracerWidth: bullet.tracerWidth * ZombiePackAPunchTracer.widthMult,
+    };
+    if (!pellets) {
+        upgraded.tracerCore = {
+            color: ZombiePackAPunchColors.tracerCore,
+            widthMult: ZombiePackAPunchTracer.coreWidthMult,
+        };
+        upgraded.sparkTrail = true;
+    }
+    BulletDefs[type] = upgraded;
+    return type;
+}
+
 // Zombies Pack-a-Punch: an upgraded twin for every gun in ZombiePackAPunchNames
 // (names live in shared/defs/maps/zombiePackAPunch.ts). Damage and magazine
 // bonuses are applied in WeaponManager from the `zombieUpgraded` flag.
@@ -3751,6 +3784,7 @@ for (const [base, name] of Object.entries(ZombiePackAPunchNames)) {
     if (!def) throw new Error(`Pack-a-Punch: unknown gun ${base}`);
     const upgraded: GunDef = util.mergeDeep({}, def, {
         name,
+        bulletType: packAPunchBullet(def.bulletType, def.bulletCount > 1),
         quality: 1,
         zombieUpgraded: true,
         lootImg: {

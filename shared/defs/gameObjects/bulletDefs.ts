@@ -22,6 +22,10 @@ export interface BulletDef {
     glowColor?: number;
     /** Sprite scale of the glow (part-flare-01, ~6 world units at 1). */
     glowScale?: number;
+    /** Client-only: small sparks shed behind the bullet as it flies (Mark II tracers). */
+    sparkTrail?: boolean;
+    /** Client-only: a thinner, brighter line drawn inside the tracer (Mark II "plasma core"). */
+    tracerCore?: { color: number; widthMult: number };
 }
 
 export const BaseDefs: Record<string, BulletDef> = {

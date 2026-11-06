@@ -52,14 +52,22 @@ export function playHitFx(
         filter: "muffled",
     });
 }
+/** Seconds between Mark II spark-trail particles per bullet (client only). */
+const SparkTrailInterval = 0.06;
+
 export class BulletBarn {
     bullets: Array<{
         alive: boolean;
         container: PIXI.Container;
         bulletTrail: PIXI.Sprite;
+        /** Optional bright core drawn inside the trail (BulletDef.tracerCore). */
+        coreTrail: PIXI.Sprite;
         /** Optional glow on the bolt head (BulletDef.glowColor). */
         glow: PIXI.Sprite;
         glowScale: number;
+        /** Mark II tracers: shed small sparks while flying. */
+        sparkTrail: boolean;
+        sparkTicker: number;
         isNew: boolean;
         collided: boolean;
         scale: number;
@@ -121,6 +129,10 @@ export class BulletBarn {
             b.bulletTrail = PIXI.Sprite.from("player-bullet-trail-02.img");
             b.bulletTrail.anchor.set(0.5, 0.5);
             b.container.addChild(b.bulletTrail);
+            b.coreTrail = PIXI.Sprite.from("player-bullet-trail-02.img");
+            b.coreTrail.anchor.set(0.5, 0.5);
+            b.coreTrail.visible = false;
+            b.container.addChild(b.coreTrail);
             b.glow = PIXI.Sprite.from("part-flare-01.img");
             b.glow.anchor.set(0.5, 0.5);
             b.glow.visible = false;
@@ -172,6 +184,12 @@ export class BulletBarn {
             tracerWidth *= 2;
         }
         b.bulletTrail.scale.set(0.8, tracerWidth);
+        const core = bulletDef.tracerCore;
+        b.coreTrail.visible = !!core;
+        if (core) {
+            b.coreTrail.scale.set(0.8, tracerWidth * core.widthMult);
+            b.coreTrail.tint = core.color;
+        }
         b.tracerLength = bulletDef.tracerLength;
         b.suppressed = !!bulletDef.suppressed;
 
@@ -192,9 +210,12 @@ export class BulletBarn {
         if (b.reflectCount > 0) {
             b.bulletTrail.alpha *= 0.5;
         }
+        b.coreTrail.alpha = b.bulletTrail.alpha;
         b.container.visible = true;
         renderer.addPIXIObj(b.container, b.layer, 20);
 
+        b.sparkTrail = !!bulletDef.sparkTrail;
+        b.sparkTicker = util.random(0, SparkTrailInterval);
         b.glowScale = bulletDef.glowScale ?? 0;
         b.glow.visible = bulletDef.glowColor !== undefined;
         if (b.glow.visible) {
@@ -248,6 +269,15 @@ export class BulletBarn {
                     b.particleTicker = util.random(0, 0.1); // Done to make the particles for shotguns less periodic and more continuous
                 }
 
+                if (b.sparkTrail) {
+                    b.sparkTicker -= dt;
+                    if (b.sparkTicker <= 0) {
+                        b.sparkTicker = SparkTrailInterval;
+                        const drift = v2.mul(v2.randomUnit(), util.random(0.5, 2));
+                        particleBarn.addParticle("papTrailSpark", b.layer, b.pos, drift);
+                    }
+                }
+
                 if (
                     !activePlayer.m_netData.m_dead
                     && util.sameAudioLayer(activePlayer.layer, b.layer)
@@ -269,6 +299,7 @@ export class BulletBarn {
                         b.tracerAlphaMin,
                         b.bulletTrail.alpha * rate,
                     );
+                    b.coreTrail.alpha = b.bulletTrail.alpha;
                 }
 
                 // Gather colliding obstacles and players
