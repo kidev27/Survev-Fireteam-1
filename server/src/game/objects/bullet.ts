@@ -1,3 +1,4 @@
+import type { BulletDef } from "../../../../shared/defs/gameObjects/bulletDefs.ts";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../../../shared/defs/register.ts";
 import { type DamageType, GameConfig } from "../../../../shared/gameConfig.ts";
@@ -176,6 +177,12 @@ export class Bullet {
     reflected!: boolean;
     canReflect!: boolean;
     damagedObjIds!: Set<number>;
+    /** Pack-a-Punch piercing: extra players this bullet can still pass through. */
+    pierceLeft!: number;
+    pierceFalloff!: number;
+    pierceDamageMult!: number;
+    /** Pack-a-Punch chain lightning settings (undefined for normal bullets). */
+    chain?: BulletDef["chain"];
 
     constructor(public bulletManager: BulletBarn) {}
 
@@ -266,6 +273,10 @@ export class Bullet {
         this.clientEndPos = v2.copy(this.endPos);
         this.damage = bulletDef.damage * this.damageMult;
         this.skipCollision = !!bulletDef.skipCollision;
+        this.pierceLeft = bulletDef.pierce ? bulletDef.pierce.maxTargets - 1 : 0;
+        this.pierceFalloff = bulletDef.pierce?.damageFalloff ?? 0;
+        this.pierceDamageMult = 1;
+        this.chain = bulletDef.chain;
         this.isShrapnel = bulletDef.shrapnel;
         this.falloff = bulletDef.falloff;
         this.obstacleDamageMult = bulletDef.obstacleDamage;
@@ -463,6 +474,8 @@ export class Bullet {
                         && (obj.__id !== this.playerId || this.damageSelf)
                         && obj.__id !== this.reflectObjId
                     )
+                    // Already hit by this bullet (piercing rounds keep travelling through it).
+                    || this.damagedObjIds.has(obj.__id)
                 ) {
                     continue;
                 }
@@ -565,7 +578,9 @@ export class Bullet {
                         dist: v2.lengthSqr(v2.sub(panCollision.point, this.startPos)),
                     });
                 }
-                if (collision || panCollision) {
+                // Normal bullets only resolve the first player; piercing rounds
+                // gather every player on the segment and sort them by distance below.
+                if ((collision || panCollision) && this.pierceLeft <= 0) {
                     break;
                 }
             }
@@ -646,15 +661,31 @@ export class Bullet {
                         mapSourceType: this.mapSourceType,
                         source: this.player,
                         damageType: this.damageType,
-                        amount: multiplier * finalDamage,
+                        amount: multiplier * finalDamage * this.pierceDamageMult,
                         dir: this.dir,
                         isExplosion: this.isShrapnel,
                         armorPenetration: this.apRounds
                             ? PerkProperties.ap_rounds.armorPenetration
                             : undefined,
                     });
+                    if (this.chain && this.bulletManager.game.specOps) {
+                        this.bulletManager.game.specOps.papChain(
+                            col.player!,
+                            this.player,
+                            finalDamage * this.pierceDamageMult * this.chain.damageMult,
+                            this.chain,
+                            this.damagedObjIds,
+                            this.shotSourceType,
+                        );
+                    }
                 }
                 hit = col.collidable;
+                if (hit && this.pierceLeft > 0) {
+                    // Pack-a-Punch piercing: keep going, slightly weaker each time.
+                    this.pierceLeft--;
+                    this.pierceDamageMult *= 1 - this.pierceFalloff;
+                    hit = false;
+                }
             } else if (col.type == "pan") {
                 hit = col.collidable;
                 this.reflect(col.point, col.normal, col.obj?.__id ?? 0);

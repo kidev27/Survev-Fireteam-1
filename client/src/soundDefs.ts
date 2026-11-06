@@ -160,7 +160,7 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         // Pack-a-Punch Mark II guns: energy zap layered over the normal shot.
         pap_shot_layer_01: {
             path: "audio/guns/pap_shot_layer_01.mp3",
-            volume: 1,
+            volume: 1.85,
             maxInstances: 8,
         },
         deagle_reload_01: {

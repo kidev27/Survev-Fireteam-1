@@ -76,6 +76,7 @@ import {
 import {
     packAPunchArtOffset,
     packAPunchUpgradeFor,
+    ZombiePackAPunchArcBullet,
     ZombiePackAPunchSprite,
     ZombiePackAPunchStats,
     ZombiePackAPunchType,
@@ -6167,6 +6168,79 @@ export class SpecOpsManager implements PracticeHost {
                 dir,
                 isExplosion: true,
             });
+        }
+    }
+
+    /**
+     * Pack-a-Punch chain lightning (BO3 style): the hit zombie arcs to the
+     * nearest zombie in range, which arcs to the next, up to `maxJumps`.
+     * Walls block an arc. Each hop sends one tiny visual-only bullet so
+     * clients draw the bolt; no extra collision work happens for it.
+     */
+    papChain(
+        from: Player,
+        shooter: Player | undefined,
+        amount: number,
+        chain: { maxJumps: number; range: number },
+        hitIds: Set<number>,
+        sourceType: string,
+    ): void {
+        if (from.specOpsKind !== "enemy" || amount <= 0) return;
+        const layer = from.layer;
+        const rangeSqr = chain.range * chain.range;
+        let pos = from.pos;
+        hitIds.add(from.__id);
+
+        for (let jump = 0; jump < chain.maxJumps; jump++) {
+            const objs = this.game.grid.intersectCollider(collider.createCircle(pos, chain.range));
+            let best: Player | undefined;
+            let bestDistSqr = rangeSqr;
+            for (let i = 0; i < objs.length; i++) {
+                const obj = objs[i];
+                if (obj.__type !== ObjectType.Player) continue;
+                const target = obj as Player;
+                if (
+                    target.dead
+                    || target.specOpsKind !== "enemy"
+                    || hitIds.has(target.__id)
+                    || (shooter && target.teamId === shooter.teamId)
+                    || !util.sameLayer(target.layer, layer)
+                ) continue;
+                const distSqr = v2.lengthSqr(v2.sub(target.pos, pos));
+                if (distSqr >= bestDistSqr) continue;
+                // Line-of-sight only for a candidate that would beat the current best.
+                if (!this.rayGunSplashClear(pos, target.pos, layer)) continue;
+                best = target;
+                bestDistSqr = distSqr;
+            }
+            if (!best) return;
+
+            hitIds.add(best.__id);
+            const toTarget = v2.sub(best.pos, pos);
+            const dist = Math.sqrt(bestDistSqr);
+            const dir = dist > 0.001 ? v2.div(toTarget, dist) : v2.create(1, 0);
+            this.game.bulletBarn.damages.push({
+                obj: best,
+                amount,
+                damageType: GameConfig.DamageType.Player,
+                source: shooter,
+                gameSourceType: sourceType,
+                weaponSourceType: sourceType,
+                dir,
+            });
+            this.game.bulletBarn.fireBullet({
+                bulletType: ZombiePackAPunchArcBullet,
+                gameSourceType: sourceType,
+                pos: v2.copy(pos),
+                dir,
+                layer,
+                damageMult: 0,
+                damageType: GameConfig.DamageType.Player,
+                playerId: shooter?.__id ?? 0,
+                clipDistance: true,
+                distance: dist,
+            });
+            pos = v2.copy(best.pos);
         }
     }
 

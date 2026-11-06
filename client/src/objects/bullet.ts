@@ -13,6 +13,7 @@ import type { Camera } from "../camera.ts";
 import type { Map } from "../map.ts";
 import type { Renderer } from "../renderer.ts";
 import type { FlareBarn } from "./flare.ts";
+import { PapArcBarn } from "./papArc.ts";
 import type { ParticleBarn } from "./particles.ts";
 import type { Player, PlayerBarn } from "./player.ts";
 
@@ -88,7 +89,13 @@ export class BulletBarn {
         tracerAlphaMin: number;
         combatStims: boolean;
         particleTicker: number;
+        /** Pack-a-Punch piercing: players this bullet can still pass through. */
+        pierceLeft: number;
+        pierceHitIds: number[];
     }> = [];
+
+    /** Pack-a-Punch chain-lightning bolts (BulletDef.chainArc). */
+    arcs = new PapArcBarn();
 
     tracerColors: Record<
         string,
@@ -111,6 +118,13 @@ export class BulletBarn {
     }
 
     addBullet(bullet: Bullet, playerBarn: PlayerBarn, renderer: Renderer) {
+        const bulletDef = GameObjectDefs.typeToDef(bullet.bulletType, "bullet");
+        if (bulletDef.chainArc) {
+            const length = bullet.clipDistance ? bullet.distance : bulletDef.distance;
+            this.arcs.add(bullet.pos, bullet.dir, length, bullet.layer, renderer);
+            return;
+        }
+
         let b: (typeof this.bullets)[number] | null = null;
 
         for (let i = 0; i < this.bullets.length; i++) {
@@ -137,9 +151,8 @@ export class BulletBarn {
             b.glow.anchor.set(0.5, 0.5);
             b.glow.visible = false;
             this.bullets.push(b);
+            b.pierceHitIds = [];
         }
-
-        const bulletDef = GameObjectDefs.typeToDef(bullet.bulletType, "bullet");
 
         const variance = 1 + bullet.varianceT * bulletDef.variance;
         const distAdj = math.remap(bullet.distAdjIdx, 0, 16, -1, 1);
@@ -165,6 +178,8 @@ export class BulletBarn {
         b.whizHeard = false;
         b.combatStims = bullet.combatStims;
         b.particleTicker = util.random(0.05, 0.15);
+        b.pierceLeft = bulletDef.pierce ? bulletDef.pierce.maxTargets - 1 : 0;
+        b.pierceHitIds.length = 0;
 
         const angleRadians = Math.atan2(b.dir.x, b.dir.y);
         b.container.rotation = angleRadians - Math.PI / 2;
@@ -235,6 +250,7 @@ export class BulletBarn {
         particleBarn: ParticleBarn,
         audioManager: AudioManager,
     ) {
+        this.arcs.update(dt, particleBarn);
         const players = playerBarn.playerPool.m_getPool();
         for (let i = 0; i < this.bullets.length; i++) {
             const b = this.bullets[i];
@@ -349,6 +365,7 @@ export class BulletBarn {
                         && (util.sameLayer(player.m_netData.m_layer, b.layer)
                             || player.m_netData.m_layer & 2)
                         && (player.__id != b.playerId || b.damageSelf)
+                        && (b.pierceHitIds.length === 0 || !b.pierceHitIds.includes(player.__id))
                     ) {
                         let panCollision = null;
                         if (player.m_hasActivePan()) {
@@ -430,7 +447,7 @@ export class BulletBarn {
                                 collidable: true,
                             });
                         }
-                        if (collision || panCollision) {
+                        if ((collision || panCollision) && b.pierceLeft <= 0) {
                             break;
                         }
                     }
@@ -501,6 +518,12 @@ export class BulletBarn {
                             });
                         }
                         hit = col.collidable;
+                        if (hit && b.pierceLeft > 0) {
+                            // Pack-a-Punch piercing: the tracer carries on through.
+                            b.pierceLeft--;
+                            b.pierceHitIds.push(col.player!.__id);
+                            hit = false;
+                        }
                     } else if (col.type == "pan") {
                         playHitFx(
                             "barrelChip",
@@ -585,6 +608,7 @@ export class BulletBarn {
     }
 
     m_render(camera: Camera) {
+        this.arcs.render(camera);
         for (let i = 0; i < this.bullets.length; i++) {
             const b = this.bullets[i];
             if (b.alive || b.collided) {

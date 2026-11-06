@@ -37,6 +37,69 @@ export const ZombiePackAPunchNames: Record<string, string> = {
     qbb97: "Quantum Bullet Barrage",
 };
 
+/**
+ * PACK-A-PUNCH SPECIALS. A few guns get a signature upgrade on top of the normal
+ * Mark II bonus. To give a gun a special, move one, or remove one, edit this table:
+ * the key is the original gun type, the value one of the kinds below. Guns not
+ * listed stay stats-only. `label` is shown once when the Mark II gun is picked up.
+ *
+ * - burstToAuto: a burst gun becomes full-auto at `fireDelay` seconds per shot.
+ * - variableFireRate: after each reload, the first `fastShots` shots fire at
+ *   `fastFireDelay`, then the delay eases back to the gun's normal rate over
+ *   `rampShots` more shots (HAMR style).
+ * - pierce: a bullet hits up to `maxTargets` zombies in a line, losing
+ *   `damageFalloff` of its damage at each one.
+ * - chain: a hit arcs from zombie to zombie up to `maxJumps` times (each jump to
+ *   the nearest unhit zombie within `range`), dealing `damageMult` of the hit.
+ */
+export type ZombiePackAPunchSpecial =
+    | { kind: "burstToAuto"; label: string; fireDelay: number }
+    | {
+        kind: "variableFireRate";
+        label: string;
+        fastFireDelay: number;
+        fastShots: number;
+        rampShots: number;
+    }
+    | { kind: "pierce"; label: string; maxTargets: number; damageFalloff: number }
+    | { kind: "chain"; label: string; maxJumps: number; range: number; damageMult: number };
+
+export const ZombiePackAPunchSpecials: Record<string, ZombiePackAPunchSpecial> = {
+    famas: { kind: "burstToAuto", label: "Full-auto: burst fire becomes automatic", fireDelay: 0.08 },
+    ump9: { kind: "burstToAuto", label: "Full-auto: burst fire becomes automatic", fireDelay: 0.09 },
+    m249: {
+        kind: "variableFireRate",
+        label: "Overdrive: first shots of every mag fire twice as fast",
+        fastFireDelay: 0.04,
+        fastShots: 15,
+        rampShots: 10,
+    },
+    sv98: { kind: "pierce", label: "Piercing: hits up to 4 zombies in a line", maxTargets: 4, damageFalloff: 0.15 },
+    deagle: { kind: "pierce", label: "Piercing: hits up to 2 zombies in a line", maxTargets: 2, damageFalloff: 0.2 },
+    awc: {
+        kind: "chain",
+        label: "Chain lightning: arcs to 3 more zombies",
+        maxJumps: 3,
+        range: 6,
+        damageMult: 0.4,
+    },
+    vector: {
+        kind: "chain",
+        label: "Chain lightning: arcs to 1 more zombie",
+        maxJumps: 1,
+        range: 5,
+        damageMult: 0.35,
+    },
+};
+
+/** Visual-only bullet the server sends for each chain-lightning hop. */
+export const ZombiePackAPunchArcBullet = "bullet_pap_arc";
+
+/** Special for a Mark II gun type; undefined for normal guns and stats-only Mark IIs. */
+export function packAPunchSpecialFor(gunType: string): ZombiePackAPunchSpecial | undefined {
+    return isPackAPunchType(gunType) ? ZombiePackAPunchSpecials[packAPunchBaseType(gunType)] : undefined;
+}
+
 /** Upgrade stats (unchanged from the old workbench). */
 export const ZombiePackAPunchStats = {
     cost: 5000,
@@ -91,9 +154,12 @@ export function packAPunchArtOffset(p: { x: number; y: number }): { x: number; y
 
 const Suffix = "_pap";
 
-/** Mark II copy of a bullet type, e.g. `bullet_ak47` -> `bullet_ak47_pap`. */
-export function packAPunchBulletType(bulletType: string): string {
-    return `${bulletType}${Suffix}`;
+/**
+ * Mark II copy of a bullet type, e.g. `bullet_ak47` -> `bullet_ak47_pap`. Guns with a
+ * piercing / chain special get their own copy: `bullet_awc` + `awc` -> `bullet_awc_pap_awc`.
+ */
+export function packAPunchBulletType(bulletType: string, specialGun?: string): string {
+    return specialGun ? `${bulletType}${Suffix}_${specialGun}` : `${bulletType}${Suffix}`;
 }
 
 export function packAPunchType(base: string): string {

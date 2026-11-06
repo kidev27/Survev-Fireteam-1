@@ -26,6 +26,12 @@ export interface BulletDef {
     sparkTrail?: boolean;
     /** Client-only: a thinner, brighter line drawn inside the tracer (Mark II "plasma core"). */
     tracerCore?: { color: number; widthMult: number };
+    /** Pack-a-Punch: pass through up to `maxTargets` zombies, losing `damageFalloff` at each. */
+    pierce?: { maxTargets: number; damageFalloff: number };
+    /** Pack-a-Punch: a hit arcs zombie-to-zombie up to `maxJumps` times for `damageMult` of the hit. */
+    chain?: { maxJumps: number; range: number; damageMult: number };
+    /** Visual-only bullet drawn as a lightning arc between two points (chain hits). */
+    chainArc?: boolean;
 }
 
 export const BaseDefs: Record<string, BulletDef> = {
@@ -460,6 +466,24 @@ export const BaseDefs: Record<string, BulletDef> = {
         noDistAdj: true,
         glowColor: 0x7dff6b,
         glowScale: 0.45,
+    },
+    // Pack-a-Punch chain lightning: carries the arc from one zombie to the next to
+    // clients. No collision and no damage (the server applies chain damage directly).
+    bullet_pap_arc: {
+        type: "bullet",
+        damage: 0,
+        obstacleDamage: 0,
+        falloff: 1,
+        speed: 1000,
+        distance: 100,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "pap",
+        tracerWidth: 0.1,
+        tracerLength: 0.1,
+        skipCollision: true,
+        noDistAdj: true,
+        chainArc: true,
     },
     bullet_barrett: {
         type: "bullet",
