@@ -2272,6 +2272,25 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return Math.random() < 0.6 ? 0x9b6bff : 0x6fe8ff;
         },
     },
+    // Pack-a-Punch chain lightning: brief purple-white zap over a shocked zombie.
+    // Parented to the zombie so it follows it; 0.2 s total.
+    papShockFlash: {
+        image: ["part-flare-01.img"],
+        life: 0.2,
+        drag: 0,
+        rotVel: 0,
+        scale: {
+            start: 0.42,
+            end: 0.3,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 0.85,
+            end: 0,
+            lerp: new Range(0.25, 1),
+        },
+        color: 0xe2d4ff,
+    },
     // Pack-a-Punch: rings pulsing out of the machine's core while it works.
     papRing: {
         image: ["part-pap-ring-01.img"],

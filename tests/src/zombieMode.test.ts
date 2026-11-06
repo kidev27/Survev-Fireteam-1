@@ -20,6 +20,7 @@ import type { GunDef } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { SpecOpsShopCatalog } from "../../shared/defs/maps/specOpsShop.ts";
 import {
+    packAPunchArcBulletType,
     packAPunchBulletType,
     packAPunchSpecialFor,
     packAPunchType,
@@ -28,6 +29,8 @@ import {
     ZombiePackAPunchNames,
     ZombiePackAPunchSpecials,
     ZombiePackAPunchStats,
+    ZombiePackAPunchStunImmunity,
+    ZombiePackAPunchStunStreakReset,
     ZombiePackAPunchTracer,
     ZombiePackAPunchType,
 } from "../../shared/defs/maps/zombiePackAPunch.ts";
@@ -45,6 +48,7 @@ import {
 } from "../../shared/defs/maps/zombiePowerUps.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../shared/defs/register.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
+import * as net from "../../shared/net/net.ts";
 import { collider } from "../../shared/utils/collider.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2 } from "../../shared/utils/v2.ts";
@@ -1343,7 +1347,18 @@ test("Pack-a-Punch specials: table is valid and only listed guns change behaviou
                     maxJumps: special.maxJumps,
                     range: special.range,
                     damageMult: special.damageMult,
+                    arcBullet: packAPunchArcBulletType(base),
+                    ...(special.chainEvery ? { chainEvery: special.chainEvery } : {}),
+                    ...(special.stun ? { stun: special.stun } : {}),
+                    ...(special.stunEvery ? { stunEvery: special.stunEvery } : {}),
                 });
+                {
+                    // Each chain gun has its own arc bullet carrying its arc duration.
+                    const arc = GameObjectDefs.typeToDef(packAPunchArcBulletType(base), "bullet");
+                    expect(arc.chainArc, base).toEqual({ life: special.arcLife });
+                    expect(arc.damage, base).toBe(0);
+                    expect(arc.skipCollision, base).toBe(true);
+                }
                 break;
             default:
                 expect(mk2.fireMode, base).toBe(gun.fireMode);
@@ -1360,9 +1375,12 @@ test("Pack-a-Punch specials: table is valid and only listed guns change behaviou
         }
     }
     const arc = GameObjectDefs.typeToDef(ZombiePackAPunchArcBullet, "bullet");
-    expect(arc.chainArc).toBe(true);
+    expect(arc.chainArc?.life).toBeGreaterThan(0);
     expect(arc.damage).toBe(0);
     expect(arc.skipCollision).toBe(true);
+    // Vector arcs clear faster than AWM-S arcs.
+    const life = (gun: string) => GameObjectDefs.typeToDef(packAPunchArcBulletType(gun), "bullet").chainArc!.life;
+    expect(life("vector")).toBeLessThan(life("awc"));
 });
 
 test("Pack-a-Punch specials: M249 Overdrive fires fast after each reload, then eases back", () => {
@@ -1534,7 +1552,8 @@ test("Pack-a-Punch specials: piercing rounds still stop at walls", () => {
 test("Pack-a-Punch specials: AWM-S Mark II chains through 3 zombies in range, once each", () => {
     // Hit A; B, C, D each within 6 of the previous; E is out of range of everyone.
     const lane = specialsLane([[5, 0], [5, 4.5], [5, 9], [9, 12], [5, 40]]);
-    const arcsBefore = lane.game.bulletBarn.bullets.filter((b) => b.bulletType === ZombiePackAPunchArcBullet).length;
+    const arcType = packAPunchArcBulletType("awc");
+    const arcsBefore = lane.game.bulletBarn.bullets.filter((b) => b.bulletType === arcType).length;
     lane.fire(packAPunchType("awc"));
     const d = lane.lost();
     const special = ZombiePackAPunchSpecials.awc;
@@ -1542,7 +1561,7 @@ test("Pack-a-Punch specials: AWM-S Mark II chains through 3 zombies in range, on
     expect(d[0]).toBeGreaterThan(0);
     for (let i = 1; i <= 3; i++) expect(d[i] / d[0], `jump ${i}`).toBeCloseTo(special.damageMult, 2);
     expect(d[4]).toBe(0);
-    const arcs = lane.game.bulletBarn.bullets.filter((b) => b.bulletType === ZombiePackAPunchArcBullet);
+    const arcs = lane.game.bulletBarn.bullets.filter((b) => b.bulletType === arcType);
     expect(arcs.length - arcsBefore).toBe(3);
     // Arc bullets are exact hop lengths and never collide.
     for (const arc of arcs) {
@@ -1551,16 +1570,201 @@ test("Pack-a-Punch specials: AWM-S Mark II chains through 3 zombies in range, on
     }
 });
 
+test("Pack-a-Punch specials: AWM-S chain stuns every zombie it hits, then they recover", () => {
+    const special = ZombiePackAPunchSpecials.awc;
+    if (special.kind !== "chain" || !special.stun) throw new Error("awc should chain and stun");
+    const stun = special.stun;
+    const lane = specialsLane([[5, 0], [5, 4.5], [5, 40]]);
+    const { game, ops, zombies } = lane;
+    lane.fire(packAPunchType("awc"));
+    const [hit, chained, far] = zombies;
+    expect(ops.stunTimerPublic(hit)).toBeCloseTo(stun, 5);
+    expect(ops.stunTimerPublic(chained)).toBeCloseTo(stun, 5);
+    expect(ops.stunTimerPublic(far)).toBe(0);
+
+    // While stunned the AI gives no move or attack input.
+    game.update(0.1);
+    for (const z of [hit, chained]) {
+        expect(z.touchMoveActive).toBe(false);
+        expect(z.moveUp || z.moveDown || z.moveLeft || z.moveRight).toBe(false);
+        expect(z.shootHold).toBe(false);
+    }
+    // A longer stun is never shortened by a shorter one.
+    ops.stunEnemy(hit, 5);
+    ops.stunEnemy(hit, 0.1);
+    expect(ops.stunTimerPublic(hit)).toBeGreaterThan(4);
+
+    for (let i = 0; i < Math.ceil(stun / 0.1) + 1; i++) game.update(0.1);
+    expect(ops.stunTimerPublic(chained)).toBeLessThanOrEqual(0);
+});
+
+test("Pack-a-Punch specials: Vector chain stuns only on every Nth hit", () => {
+    const special = ZombiePackAPunchSpecials.vector;
+    if (special.kind !== "chain" || !special.stun || !special.stunEvery) throw new Error("vector should stun every N");
+    const lane = specialsLane([[5, 0], [5, 3]]);
+    const [hit, chained] = lane.zombies;
+    for (let i = 1; i < special.stunEvery; i++) {
+        lane.fire(packAPunchType("vector"));
+        expect(lane.ops.stunTimerPublic(hit), `hit ${i}`).toBe(0);
+        expect(lane.ops.stunTimerPublic(chained), `hit ${i}`).toBe(0);
+    }
+    expect(lane.lost()[1]).toBeGreaterThan(0);
+    lane.fire(packAPunchType("vector"));
+    expect(lane.ops.stunTimerPublic(hit)).toBeCloseTo(special.stun, 5);
+    expect(lane.ops.stunTimerPublic(chained)).toBeCloseTo(special.stun, 5);
+    // Let the stun and its immunity run out, put the zombies back, and the
+    // count starts over: hits 11-19 don't stun, hit 20 does.
+    const placed = lane.zombies.map((z) => v2.copy(z.pos));
+    const ticks = Math.ceil((special.stun + ZombiePackAPunchStunImmunity) / 0.1) + 2;
+    for (let i = 0; i < ticks; i++) lane.game.update(0.1);
+    expect(lane.ops.stunTimerPublic(hit)).toBeLessThanOrEqual(0);
+    const replace = () => {
+        lane.zombies.forEach((z, i) => {
+            v2.set(z.pos, placed[i]);
+            z.health = z.maxHealth;
+            lane.game.grid.updateObject(z);
+        });
+    };
+    for (let i = 1; i < special.stunEvery; i++) {
+        replace();
+        lane.fire(packAPunchType("vector"));
+        expect(lane.ops.stunTimerPublic(hit), `hit ${special.stunEvery + i}`).toBeLessThanOrEqual(0);
+    }
+    replace();
+    lane.fire(packAPunchType("vector"));
+    expect(lane.ops.stunTimerPublic(hit)).toBeCloseTo(special.stun, 5);
+});
+
+test("Pack-a-Punch specials: Vector stun needs one continuous trigger hold", () => {
+    const special = ZombiePackAPunchSpecials.vector;
+    if (special.kind !== "chain" || !special.stun || !special.stunEvery) throw new Error("vector should stun every N");
+    const lane = specialsLane([[5, 0], [5, 3]]);
+    const { shooter } = lane;
+    const [hit] = lane.zombies;
+    // Many hits on the same zombies: keep them alive between shots.
+    const vector = packAPunchType("vector");
+    const fire = lane.fire;
+    lane.fire = (gun: string) => {
+        for (const z of lane.zombies) z.health = z.maxHealth;
+        return fire(gun);
+    };
+
+    // Tap-firing (a new trigger press per shot) never builds a stun.
+    for (let i = 0; i < special.stunEvery * 3; i++) {
+        shooter.triggerPressId++;
+        lane.fire(vector);
+        expect(lane.ops.stunTimerPublic(hit), `tap ${i + 1}`).toBe(0);
+    }
+
+    // Holding: 9 hits, release and press again, and the count starts over.
+    shooter.triggerPressId++;
+    for (let i = 1; i < special.stunEvery; i++) lane.fire(vector);
+    shooter.triggerPressId++;
+    for (let i = 1; i < special.stunEvery; i++) {
+        lane.fire(vector);
+        expect(lane.ops.stunTimerPublic(hit), `hold hit ${i}`).toBe(0);
+    }
+    // 10th hit of this one hold stuns.
+    lane.fire(vector);
+    expect(lane.ops.stunTimerPublic(hit)).toBeCloseTo(special.stun, 5);
+});
+
+test("Pack-a-Punch specials: a long gap between hits resets the Vector count even while holding", () => {
+    const special = ZombiePackAPunchSpecials.vector;
+    if (special.kind !== "chain" || !special.stun || !special.stunEvery) throw new Error("vector should stun every N");
+    const lane = specialsLane([[5, 0], [5, 3]]);
+    const [hit] = lane.zombies;
+    const vector = packAPunchType("vector");
+    for (let i = 1; i < special.stunEvery; i++) lane.fire(vector);
+    lane.game.timeRunning += ZombiePackAPunchStunStreakReset + 0.25;
+    lane.fire(vector);
+    expect(lane.ops.stunTimerPublic(hit)).toBe(0);
+});
+
+test("Trigger press id: goes up on each new press, not while holding", () => {
+    const game = createGame(TeamMode.Solo, "specops_complex");
+    const player = game.playerBarn.addTestPlayer({ name: "P" });
+    game.update(0.1);
+    const input = (shootStart: boolean, shootHold: boolean) => {
+        const msg = new net.InputMsg();
+        msg.shootStart = shootStart;
+        msg.shootHold = shootHold;
+        player.handleInput(msg);
+    };
+    const id0 = player.triggerPressId;
+    input(true, true); // press
+    expect(player.triggerPressId).toBe(id0 + 1);
+    input(false, true); // still holding
+    input(false, true);
+    expect(player.triggerPressId).toBe(id0 + 1);
+    input(false, false); // release
+    expect(player.triggerPressId).toBe(id0 + 1);
+    input(false, true); // pressed again (start flag missed)
+    expect(player.triggerPressId).toBe(id0 + 2);
+    input(false, false);
+    input(true, false); // very quick tap inside one input
+    expect(player.triggerPressId).toBe(id0 + 3);
+});
+
+test("Pack-a-Punch specials: a zombie can't be re-stunned right after a stun wears off", () => {
+    const lane = specialsLane([[5, 0]]);
+    const { game, ops } = lane;
+    const [z] = lane.zombies;
+    ops.stunEnemy(z, 0.3);
+    for (let i = 0; i < 4; i++) game.update(0.1);
+    expect(ops.stunTimerPublic(z)).toBeLessThanOrEqual(0);
+    // Inside the immunity window: ignored.
+    ops.stunEnemy(z, 0.5);
+    expect(ops.stunTimerPublic(z)).toBeLessThanOrEqual(0);
+    // After it: works again.
+    for (let i = 0; i < Math.ceil(ZombiePackAPunchStunImmunity / 0.1) + 1; i++) game.update(0.1);
+    ops.stunEnemy(z, 0.5);
+    expect(ops.stunTimerPublic(z)).toBeCloseTo(0.5, 5);
+});
+
 test("Pack-a-Punch specials: Vector Mark II chains to only 1 zombie, never teammates", () => {
     const lane = specialsLane([[5, 0], [5, 3], [5, 6]]);
     v2.set(lane.mate.pos, v2.add(lane.zombies[0].pos, v2.create(0, -2.5)));
     lane.mate.layer = lane.shooter.layer;
     lane.game.grid.updateObject(lane.mate);
     const mateHp = lane.mate.health;
-    lane.fire(packAPunchType("vector"));
+    const special = ZombiePackAPunchSpecials.vector;
+    const hitsToChain = special.kind === "chain" ? special.chainEvery ?? 1 : 1;
+    for (let i = 0; i < hitsToChain; i++) lane.fire(packAPunchType("vector"));
     const d = lane.lost();
     expect(d[0]).toBeGreaterThan(0);
     expect(d[1]).toBeGreaterThan(0);
     expect(d[2]).toBe(0);
     expect(lane.mate.health).toBe(mateHp);
+});
+
+test("Pack-a-Punch specials: Vector lightning only on every Nth hit of a held trigger", () => {
+    const special = ZombiePackAPunchSpecials.vector;
+    if (special.kind !== "chain" || !special.chainEvery || special.chainEvery < 2) {
+        throw new Error("vector should chain every N hits");
+    }
+    const every = special.chainEvery;
+    const lane = specialsLane([[5, 0], [5, 3]]);
+    const { shooter } = lane;
+    const arcType = packAPunchArcBulletType("vector");
+    const arcCount = () => lane.game.bulletBarn.newBullets.filter((b) => b.bulletType === arcType).length;
+    const fire = () => {
+        for (const z of lane.zombies) z.health = z.maxHealth;
+        lane.game.bulletBarn.flush();
+        lane.fire(packAPunchType("vector"));
+        return arcCount();
+    };
+
+    // Tap-firing: a new press per shot never arcs.
+    for (let i = 0; i < every * 3; i++) {
+        shooter.triggerPressId++;
+        expect(fire(), `tap ${i + 1}`).toBe(0);
+    }
+    // Holding: only every Nth hit arcs (stun hits aside).
+    shooter.triggerPressId++;
+    const stunEvery = special.stunEvery ?? 0;
+    for (let hit = 1; hit <= every * 2; hit++) {
+        const expected = hit % every === 0 || (stunEvery > 0 && hit % stunEvery === 0) ? 1 : 0;
+        expect(fire(), `hold hit ${hit}`).toBe(expected);
+    }
 });

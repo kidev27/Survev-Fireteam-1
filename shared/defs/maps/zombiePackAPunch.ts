@@ -51,6 +51,15 @@ export const ZombiePackAPunchNames: Record<string, string> = {
  *   `damageFalloff` of its damage at each one.
  * - chain: a hit arcs from zombie to zombie up to `maxJumps` times (each jump to
  *   the nearest unhit zombie within `range`), dealing `damageMult` of the hit.
+ *   `arcLife`: seconds each lightning arc stays on screen (visual only).
+ *   Optional `chainEvery`: only every Nth hit of one continuous trigger hold
+ *   arcs (default 1 = every hit). Optional `stun`: the hit zombie and every
+ *   zombie it arcs to freeze for that many seconds. Optional `stunEvery`: only
+ *   every Nth hit of one hold stuns (default 1 = every hit); a stunning hit
+ *   always arcs. For both counts, releasing the trigger (tap firing) or going
+ *   ZombiePackAPunchStunStreakReset seconds without a hit restarts the count.
+ *   A zombie can't be re-stunned until
+ *   ZombiePackAPunchStunImmunity seconds after its last stun wore off.
  */
 export type ZombiePackAPunchSpecial =
     | { kind: "burstToAuto"; label: string; fireDelay: number }
@@ -62,7 +71,17 @@ export type ZombiePackAPunchSpecial =
         rampShots: number;
     }
     | { kind: "pierce"; label: string; maxTargets: number; damageFalloff: number }
-    | { kind: "chain"; label: string; maxJumps: number; range: number; damageMult: number };
+    | {
+        kind: "chain";
+        label: string;
+        maxJumps: number;
+        range: number;
+        damageMult: number;
+        arcLife: number;
+        chainEvery?: number;
+        stun?: number;
+        stunEvery?: number;
+    };
 
 export const ZombiePackAPunchSpecials: Record<string, ZombiePackAPunchSpecial> = {
     famas: { kind: "burstToAuto", label: "Full-auto: burst fire becomes automatic", fireDelay: 0.08 },
@@ -78,22 +97,45 @@ export const ZombiePackAPunchSpecials: Record<string, ZombiePackAPunchSpecial> =
     deagle: { kind: "pierce", label: "Piercing: hits up to 2 zombies in a line", maxTargets: 2, damageFalloff: 0.2 },
     awc: {
         kind: "chain",
-        label: "Chain lightning: arcs to 3 more zombies",
+        label: "Chain lightning: arcs to 3 more zombies and stuns them",
         maxJumps: 3,
         range: 6,
         damageMult: 0.4,
+        arcLife: 0.7,
+        stun: 0.5,
     },
     vector: {
         kind: "chain",
-        label: "Chain lightning: arcs to 1 more zombie",
+        label: "Chain lightning: arcs to 1 more zombie, every 10th hit stuns",
         maxJumps: 1,
         range: 5,
-        damageMult: 0.35,
+        damageMult: 0.39,
+        arcLife: 0.3,
+        chainEvery: 4,
+        stun: 0.3,
+        stunEvery: 10,
     },
 };
 
-/** Visual-only bullet the server sends for each chain-lightning hop. */
+/**
+ * Seconds after a chain-lightning stun wears off before that zombie can be
+ * stunned again, so fast guns can't keep a zombie frozen.
+ */
+export const ZombiePackAPunchStunImmunity = 0.75;
+
+/**
+ * For `stunEvery` guns: going this many seconds without landing a hit resets
+ * the hit count, even while the trigger is held (releasing it always resets).
+ */
+export const ZombiePackAPunchStunStreakReset = 0.75;
+
+/** Template for the visual-only bullet sent per chain-lightning hop. */
 export const ZombiePackAPunchArcBullet = "bullet_pap_arc";
+
+/** Per-gun chain arc bullet (carries that gun's `arcLife` to clients). */
+export function packAPunchArcBulletType(gun: string): string {
+    return `${ZombiePackAPunchArcBullet}_${gun}`;
+}
 
 /** Special for a Mark II gun type; undefined for normal guns and stats-only Mark IIs. */
 export function packAPunchSpecialFor(gunType: string): ZombiePackAPunchSpecial | undefined {

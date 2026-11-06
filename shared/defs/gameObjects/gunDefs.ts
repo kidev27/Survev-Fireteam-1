@@ -1,8 +1,10 @@
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
 import {
+    packAPunchArcBulletType,
     packAPunchBulletType,
     packAPunchType,
+    ZombiePackAPunchArcBullet,
     ZombiePackAPunchColors,
     ZombiePackAPunchNames,
     ZombiePackAPunchSpecials,
@@ -3762,6 +3764,13 @@ export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
  * bullets also get a cyan-white plasma core and a spark trail; shotgun pellets
  * skip those to keep many-pellet shots light. Damage, speed and range are unchanged.
  */
+/** Per-gun copy of the chain-lightning arc bullet with that gun's arc duration. */
+function packAPunchArcBullet(gun: string, life: number): string {
+    const type = packAPunchArcBulletType(gun);
+    BulletDefs[type] = { ...BulletDefs[ZombiePackAPunchArcBullet], chainArc: { life } };
+    return type;
+}
+
 function packAPunchBullet(bulletType: string, pellets: boolean, special?: string): string {
     // Guns with a piercing / chain special get their own bullet so the effect
     // can't leak to another gun that shares the original bullet type.
@@ -3789,6 +3798,10 @@ function packAPunchBullet(bulletType: string, pellets: boolean, special?: string
             maxJumps: gunSpecial.maxJumps,
             range: gunSpecial.range,
             damageMult: gunSpecial.damageMult,
+            arcBullet: packAPunchArcBullet(special!, gunSpecial.arcLife),
+            ...(gunSpecial.chainEvery ? { chainEvery: gunSpecial.chainEvery } : {}),
+            ...(gunSpecial.stun ? { stun: gunSpecial.stun } : {}),
+            ...(gunSpecial.stunEvery ? { stunEvery: gunSpecial.stunEvery } : {}),
         };
     }
     BulletDefs[type] = upgraded;

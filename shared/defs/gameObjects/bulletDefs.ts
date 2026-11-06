@@ -29,9 +29,18 @@ export interface BulletDef {
     /** Pack-a-Punch: pass through up to `maxTargets` zombies, losing `damageFalloff` at each. */
     pierce?: { maxTargets: number; damageFalloff: number };
     /** Pack-a-Punch: a hit arcs zombie-to-zombie up to `maxJumps` times for `damageMult` of the hit. */
-    chain?: { maxJumps: number; range: number; damageMult: number };
-    /** Visual-only bullet drawn as a lightning arc between two points (chain hits). */
-    chainArc?: boolean;
+    chain?: {
+        maxJumps: number;
+        range: number;
+        damageMult: number;
+        /** Visual-only arc bullet type sent per hop. */
+        arcBullet: string;
+        chainEvery?: number;
+        stun?: number;
+        stunEvery?: number;
+    };
+    /** Visual-only bullet drawn as a lightning arc (chain hits); `life` in seconds. */
+    chainArc?: { life: number };
 }
 
 export const BaseDefs: Record<string, BulletDef> = {
@@ -483,7 +492,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 0.1,
         skipCollision: true,
         noDistAdj: true,
-        chainArc: true,
+        chainArc: { life: 0.7 },
     },
     bullet_barrett: {
         type: "bullet",

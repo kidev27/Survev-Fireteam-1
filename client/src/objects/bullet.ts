@@ -121,7 +121,7 @@ export class BulletBarn {
         const bulletDef = GameObjectDefs.typeToDef(bullet.bulletType, "bullet");
         if (bulletDef.chainArc) {
             const length = bullet.clipDistance ? bullet.distance : bulletDef.distance;
-            this.arcs.add(bullet.pos, bullet.dir, length, bullet.layer, renderer);
+            this.arcs.add(bullet.pos, bullet.dir, length, bulletDef.chainArc.life, bullet.layer, renderer);
             return;
         }
 
@@ -250,7 +250,7 @@ export class BulletBarn {
         particleBarn: ParticleBarn,
         audioManager: AudioManager,
     ) {
-        this.arcs.update(dt, particleBarn);
+        this.arcs.update(dt, particleBarn, playerBarn);
         const players = playerBarn.playerPool.m_getPool();
         for (let i = 0; i < this.bullets.length; i++) {
             const b = this.bullets[i];

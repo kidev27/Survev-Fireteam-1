@@ -1,4 +1,4 @@
-import { BulletDefs } from "../../../shared/defs/gameObjects/bulletDefs.ts";
+import { type BulletDef, BulletDefs } from "../../../shared/defs/gameObjects/bulletDefs.ts";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs.ts";
 import {
     LastCallBuildingType,
@@ -76,9 +76,10 @@ import {
 import {
     packAPunchArtOffset,
     packAPunchUpgradeFor,
-    ZombiePackAPunchArcBullet,
     ZombiePackAPunchSprite,
     ZombiePackAPunchStats,
+    ZombiePackAPunchStunImmunity,
+    ZombiePackAPunchStunStreakReset,
     ZombiePackAPunchType,
 } from "../../../shared/defs/maps/zombiePackAPunch.ts";
 import { zombiePerkMachine } from "../../../shared/defs/maps/zombiePerks.ts";
@@ -3882,6 +3883,10 @@ class AiBrain {
     lastStepDir = v2.create(1, 0);
     failedWaypoints: { pos: Vec2; ttl: number }[] = [];
     idleTicker = 0;
+    /** Seconds left frozen in place (Pack-a-Punch chain-lightning stun). */
+    stunTimer = 0;
+    /** Seconds after a stun wears off before this AI can be stunned again. */
+    stunImmuneTimer = 0;
     idleSample = v2.create(0, 0);
     idleCheckTicker = 0;
     relocateCooldown = 0;
@@ -4068,6 +4073,15 @@ class AiBrain {
         player.touchMoveActive = false;
         player.shootHold = false;
         player.shootStart = false;
+
+        // Stunned: stand still and don't attack until it wears off.
+        if (this.stunImmuneTimer > 0) this.stunImmuneTimer -= dt;
+        if (this.stunTimer > 0) {
+            this.stunTimer -= dt;
+            this.idleTicker = 0;
+            if (this.stunTimer <= 0) this.stunImmuneTimer = ZombiePackAPunchStunImmunity;
+            return;
+        }
 
         // Ironclads / suicide crawlers keep ticking while downed so they can finish their fuse.
         if (player.downed && !this.loadout.suicideVest && !this.loadout.mirvCrawl) {
@@ -5747,6 +5761,13 @@ export class SpecOpsManager implements PracticeHost {
     pushPressure = 0;
 
     private brains = new Map<Player, AiBrain>();
+    /**
+     * Pack-a-Punch `chainEvery` / `stunEvery` streaks per shooter id: hits in the
+     * current trigger hold, the press they came from, and when the last one
+     * landed (game seconds). Releasing the trigger, or a long pause between
+     * hits, resets the streak.
+     */
+    private papHoldHits = new Map<number, { hits: number; pressId: number; at: number }>();
     private toRemove: Player[] = [];
     private lastHudEnemies = -1;
     private lastHudWave = -1;
@@ -6176,16 +6197,23 @@ export class SpecOpsManager implements PracticeHost {
      * nearest zombie in range, which arcs to the next, up to `maxJumps`.
      * Walls block an arc. Each hop sends one tiny visual-only bullet so
      * clients draw the bolt; no extra collision work happens for it.
+     * With `stun`, the hit zombie and every zombie it arcs to freeze briefly
+     * (on every `stunEvery`th hit from that player).
      */
     papChain(
         from: Player,
         shooter: Player | undefined,
         amount: number,
-        chain: { maxJumps: number; range: number },
+        chain: NonNullable<BulletDef["chain"]>,
         hitIds: Set<number>,
         sourceType: string,
+        triggerPressId = 0,
     ): void {
         if (from.specOpsKind !== "enemy" || amount <= 0) return;
+        const roll = this.papChainRoll(shooter, chain, triggerPressId);
+        if (!roll.arcs) return;
+        const stun = roll.stun;
+        if (stun) this.stunEnemy(from, stun);
         const layer = from.layer;
         const rangeSqr = chain.range * chain.range;
         let pos = from.pos;
@@ -6216,6 +6244,7 @@ export class SpecOpsManager implements PracticeHost {
             if (!best) return;
 
             hitIds.add(best.__id);
+            if (stun) this.stunEnemy(best, stun);
             const toTarget = v2.sub(best.pos, pos);
             const dist = Math.sqrt(bestDistSqr);
             const dir = dist > 0.001 ? v2.div(toTarget, dist) : v2.create(1, 0);
@@ -6229,7 +6258,7 @@ export class SpecOpsManager implements PracticeHost {
                 dir,
             });
             this.game.bulletBarn.fireBullet({
-                bulletType: ZombiePackAPunchArcBullet,
+                bulletType: chain.arcBullet,
                 gameSourceType: sourceType,
                 pos: v2.copy(pos),
                 dir,
@@ -6242,6 +6271,56 @@ export class SpecOpsManager implements PracticeHost {
             });
             pos = v2.copy(best.pos);
         }
+    }
+
+    /**
+     * Whether this hit arcs, and how long it stuns. With `chainEvery` /
+     * `stunEvery` above 1, only the Nth hit of one continuous trigger hold
+     * arcs / stuns; a stunning hit always arcs too, so a freeze is never
+     * invisible. Tap-firing (a new press per shot) never builds either.
+     */
+    private papChainRoll(
+        shooter: Player | undefined,
+        chain: NonNullable<BulletDef["chain"]>,
+        triggerPressId: number,
+    ): { arcs: boolean; stun: number } {
+        const chainEvery = chain.chainEvery ?? 1;
+        const stunEvery = chain.stun ? (chain.stunEvery ?? 1) : 0;
+        // Every hit chains (and stuns, if the gun stuns): no streak needed.
+        if (chainEvery <= 1 && stunEvery <= 1) return { arcs: true, stun: chain.stun ?? 0 };
+        if (!shooter) return { arcs: chainEvery <= 1, stun: 0 };
+
+        const now = this.game.timeRunning;
+        let streak = this.papHoldHits.get(shooter.__id);
+        if (!streak) {
+            streak = { hits: 0, pressId: triggerPressId, at: now };
+            this.papHoldHits.set(shooter.__id, streak);
+        }
+        // A new press (tap firing) or a long pause between hits starts over.
+        if (streak.pressId !== triggerPressId || now - streak.at > ZombiePackAPunchStunStreakReset) {
+            streak.hits = 0;
+        }
+        streak.pressId = triggerPressId;
+        streak.at = now;
+        streak.hits++;
+        const stun = stunEvery > 0 && streak.hits % stunEvery === 0 ? chain.stun! : 0;
+        return { arcs: stun > 0 || streak.hits % chainEvery === 0, stun };
+    }
+
+    /**
+     * Freeze an AI enemy for `seconds`. Never shortens a longer stun, and does
+     * nothing while the enemy is in its post-stun immunity window.
+     */
+    stunEnemy(enemy: Player, seconds: number): void {
+        const brain = this.brains.get(enemy);
+        if (!brain || brain.kind !== "enemy") return;
+        if (brain.stunTimer <= 0 && brain.stunImmuneTimer > 0) return;
+        brain.stunTimer = Math.max(brain.stunTimer, seconds);
+    }
+
+    /** Test helper: seconds of stun left on an AI player (0 if none). */
+    stunTimerPublic(player: Player): number {
+        return this.brains.get(player)?.stunTimer ?? 0;
     }
 
     /** Splash is blocked by solid walls/obstacles between the blast and the target. */

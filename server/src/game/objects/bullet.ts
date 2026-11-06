@@ -183,6 +183,8 @@ export class Bullet {
     pierceDamageMult!: number;
     /** Pack-a-Punch chain lightning settings (undefined for normal bullets). */
     chain?: BulletDef["chain"];
+    /** Shooter's trigger press when this bullet was fired (Pack-a-Punch `stunEvery`). */
+    triggerPressId!: number;
 
     constructor(public bulletManager: BulletBarn) {}
 
@@ -223,6 +225,7 @@ export class Bullet {
         } else {
             this.player = undefined;
         }
+        this.triggerPressId = this.player?.triggerPressId ?? 0;
 
         // Add random jitter to the bullet distance. This makes spray patterns
         // for low spread, high rate-of-fire guns like the vector look better.
@@ -676,6 +679,7 @@ export class Bullet {
                             this.chain,
                             this.damagedObjIds,
                             this.shotSourceType,
+                            this.triggerPressId,
                         );
                     }
                 }
