@@ -889,6 +889,8 @@ export class Application {
     /** Fill the Map dropdown for the selected mode and hide what that mode can't use. */
     updateHomeModeFields() {
         const mode = this.homeMode();
+        // Menu theme colors follow the mode (specops-menu.css, body[data-home-mode]).
+        document.body.dataset.homeMode = mode;
         const options: Array<{ value: string; text: string }> = [];
         let saved = "";
         if (mode === "practice") {

@@ -3344,3 +3344,356 @@ body.steam-deck .specops-start .specops-lb-sidebar {
 .specops-lb-mode.menu-gamepad-focus {
   box-shadow: 0 0 0 2px #9dff9d;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Survivor Kit theme (start menu + modals). Colors live in the variables
+   below; body[data-home-mode] swaps the mode color (Fireteam gold,
+   Zombies red). Later rules here override the older green styles above.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --kit-panel: rgba(24, 24, 20, 0.9);
+  --kit-panel-solid: #1f1f1a;
+  --kit-head: #2a2a22;
+  --kit-tile: #33332b;
+  --kit-field: #11110e;
+  --kit-line: #4a4a3c;
+  --kit-text: #f2ead2;
+  --kit-muted: #b7ad8c;
+  --kit-gold: #e2ad35;
+  --kit-gold-dark: #9b7417;
+  --kit-red: #c4372b;
+  --kit-red-dark: #7d1d15;
+  --kit-olive: #6f8f4a;
+  --kit-olive-dark: #475e2d;
+  --kit-gray: #4a4a3c;
+  --kit-gray-dark: #2c2c23;
+  --kit-notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  --kit-mode: var(--kit-gold);
+  --kit-mode-dark: var(--kit-gold-dark);
+  --kit-mode-text: #1b1606;
+}
+
+body[data-home-mode="zombies"] {
+  --kit-mode: var(--kit-red);
+  --kit-mode-dark: var(--kit-red-dark);
+  --kit-mode-text: #fff4ec;
+}
+
+/* Panels: flat charcoal with a gold top edge */
+.specops-start #start-menu.specops-panel,
+.specops-start #team-menu.specops-panel,
+.specops-start #team-mobile-link.specops-panel,
+.specops-start #specops-lb-sidebar.specops-panel,
+.specops-start #zv-loadout.specops-panel {
+  background: var(--kit-panel);
+  border: 1px solid var(--kit-gray-dark);
+  border-radius: 4px;
+  border-top: 3px solid var(--kit-gold);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.specops-start .specops-panel-accent {
+  display: none;
+}
+
+.specops-start #zv-loadout.specops-panel {
+  padding-top: 12px;
+}
+
+/* Logo + tagline */
+.specops-logo-box {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 0 0;
+}
+
+.specops-logo-title {
+  color: var(--kit-text);
+  font-size: 52px;
+  letter-spacing: 0.22em;
+  text-shadow: 3px 3px 0 var(--kit-red);
+}
+
+.specops-logo-mode {
+  color: var(--kit-gold);
+}
+
+.specops-hero-tagline {
+  color: var(--kit-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Labels and headings */
+.specops-start .specops-field-label,
+.specops-start .zv-loadout-title,
+.specops-start .specops-team-field-label,
+.specops-start .specops-team-section-title {
+  color: var(--kit-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.specops-start .specops-team-title,
+.specops-lb-title {
+  color: var(--kit-gold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Text fields and dropdowns */
+.specops-start .specops-input.player-name-input,
+.specops-start .specops-input.specops-squad-name-input,
+.specops-start #team-link-input.specops-input {
+  background: var(--kit-field);
+  border: 2px solid var(--kit-line);
+  border-radius: 3px;
+  box-shadow: none;
+  color: var(--kit-text);
+}
+
+.specops-start .specops-input.player-name-input:focus,
+.specops-start .specops-input.specops-squad-name-input:focus,
+.specops-start #team-link-input.specops-input:focus {
+  border-color: var(--kit-gold);
+}
+
+.specops-start .specops-select.server-select,
+.specops-start #server-select-main,
+.specops-start #team-server-select,
+.specops-start select.specops-select,
+.specops-start select.specops-select.menu-option {
+  background: var(--kit-field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23e2ad35' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 12px center !important;
+  background-color: var(--kit-field) !important;
+  border: 2px solid var(--kit-line);
+  border-radius: 3px;
+  box-shadow: none;
+  color: var(--kit-text);
+}
+
+/* Play buttons: notched tags in the mode color */
+.specops-start .zv-play-btn.menu-option,
+.specops-start .specops-panel .specops-deploy-btn.menu-option {
+  background: var(--kit-mode);
+  border: 0;
+  border-bottom: 4px solid var(--kit-mode-dark);
+  border-radius: 3px;
+  box-shadow: none;
+  clip-path: var(--kit-notch);
+  color: var(--kit-mode-text);
+  text-shadow: none;
+}
+
+.specops-start .zv-play-btn.menu-option:hover,
+.specops-start .zv-play-btn.menu-option.menu-gamepad-focus,
+.specops-start .specops-panel .specops-deploy-btn.menu-option:hover {
+  background: var(--kit-mode);
+  filter: brightness(1.1);
+}
+
+.specops-start .zv-play-sub {
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 10px;
+  color: inherit;
+  opacity: 0.85;
+  padding: 2px 8px;
+}
+
+.specops-start .zv-play-btn.is-loading .zv-play-sub {
+  background: none;
+  padding: 0;
+}
+
+/* Team + secondary buttons */
+.specops-start .zv-team-btn.menu-option {
+  background: var(--kit-olive);
+  border: 0;
+  border-bottom: 3px solid var(--kit-olive-dark);
+  border-radius: 3px;
+  clip-path: var(--kit-notch);
+  color: #10170a;
+}
+
+.specops-start .zv-team-btn--outline.menu-option,
+.specops-start .specops-panel .specops-secondary-btn.menu-option,
+.specops-start .specops-panel .specops-footer-btn.menu-option,
+.specops-start #btn-help.specops-footer-btn {
+  background: var(--kit-gray) !important;
+  border: 0 !important;
+  border-bottom: 3px solid var(--kit-gray-dark) !important;
+  border-radius: 3px !important;
+  clip-path: var(--kit-notch);
+  color: var(--kit-text) !important;
+  line-height: 37px;
+}
+
+.specops-start .zv-team-btn--outline.menu-option:hover,
+.specops-start .specops-panel .specops-secondary-btn.menu-option:hover,
+.specops-start .specops-panel .specops-footer-btn.menu-option:hover {
+  filter: brightness(1.15);
+}
+
+/* Team menu toggles (Solo / Duo / Squad, Auto Fill, ...) */
+.specops-start .specops-mode-tab {
+  background: var(--kit-tile);
+  border-radius: 3px;
+  color: var(--kit-muted);
+}
+
+.specops-start .specops-mode-tab.is-active {
+  background: var(--kit-gold);
+  box-shadow: inset 0 -3px 0 var(--kit-gold-dark);
+  color: #1b1606;
+}
+
+/* Loadout tiles */
+.specops-start .zv-loadout-btn.menu-option {
+  background: var(--kit-tile);
+  border: 0;
+  border-radius: 3px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35);
+  color: var(--kit-text);
+}
+
+.specops-start .zv-loadout-btn.menu-option:hover,
+.specops-start .zv-loadout-btn.menu-option.menu-gamepad-focus {
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35), 0 0 0 2px var(--kit-gold);
+  color: var(--kit-text);
+}
+
+/* Leaderboard */
+.specops-lb-subtitle {
+  color: var(--kit-muted);
+}
+
+/* #specops-lb-sidebar: these are links, and app.css a:link would win otherwise. */
+#specops-lb-sidebar .specops-lb-mode {
+  background: var(--kit-tile);
+  border: 0;
+  border-radius: 3px;
+  clip-path: var(--kit-notch);
+  color: var(--kit-muted);
+}
+
+#specops-lb-sidebar .specops-lb-mode.is-active {
+  background: var(--kit-gold);
+  border: 0;
+  box-shadow: inset 0 -3px 0 var(--kit-gold-dark);
+  color: #1b1606;
+}
+
+#specops-lb-sidebar .specops-lb-mode[data-mode="zombies"].is-active {
+  background: var(--kit-red);
+  box-shadow: inset 0 -3px 0 var(--kit-red-dark);
+  color: #fff4ec;
+}
+
+.specops-lb-tabs {
+  background: var(--kit-field);
+  border: 1px solid var(--kit-line);
+  border-radius: 3px;
+}
+
+#specops-lb-sidebar .specops-lb-tab {
+  color: var(--kit-muted);
+}
+
+#specops-lb-sidebar .specops-lb-tab.is-active {
+  background: var(--kit-gray);
+  box-shadow: inset 0 -3px 0 var(--kit-gold);
+  color: var(--kit-text);
+}
+
+.specops-lb-scoreboard {
+  background: var(--kit-field);
+  border: 1px solid var(--kit-line);
+  border-radius: 3px;
+}
+
+.specops-lb-score-head {
+  background: var(--kit-head);
+  border-bottom-color: var(--kit-line);
+  color: var(--kit-muted);
+}
+
+.specops-lb-entry:nth-child(-n + 3) .specops-lb-rank {
+  color: var(--kit-gold);
+}
+
+/* Modals (frame only; contents keep their own styles) */
+.modal-header {
+  background: var(--kit-head);
+  border-radius: 4px 4px 0 0;
+  box-shadow: inset 0 3px 0 var(--kit-gold);
+}
+
+.modal-header > h2 {
+  color: var(--kit-gold);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.modal-body {
+  background: var(--kit-panel-solid);
+  color: var(--kit-text);
+}
+
+.modal-footer {
+  background: var(--kit-head);
+}
+
+.close-footer:hover,
+.close-footer:focus {
+  color: var(--kit-gold);
+}
+
+.specops-credit-edition,
+.specops-help-drawer h3 {
+  color: var(--kit-gold);
+}
+
+/* Links inside modals (outranks app.css a:link) */
+.modal-body a,
+.modal-body a:visited {
+  color: var(--kit-gold);
+}
+
+/* Team lobby */
+.specops-start .specops-team-select,
+.specops-start #team-map-select,
+.specops-start #team-difficulty-select,
+.specops-start #team-server-select,
+.specops-start #team-squad-size-select {
+  background: var(--kit-field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23e2ad35' d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 8px center !important;
+  background-color: var(--kit-field) !important;
+  border: 2px solid var(--kit-line) !important;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.specops-start #team-menu-options .specops-mode-tab.btn-hollow-selected,
+.specops-start #team-menu-options .specops-mode-tab.is-active {
+  background: var(--kit-gold) !important;
+  box-shadow: inset 0 -3px 0 var(--kit-gold-dark) !important;
+  color: #1b1606 !important;
+}
+
+.specops-team-code-display {
+  background: var(--kit-field);
+  border: 2px solid var(--kit-line);
+  border-radius: 3px;
+  color: var(--kit-gold);
+}
+
+.specops-start #btn-team-leave.specops-team-leave {
+  background: var(--kit-gray) !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  color: var(--kit-text) !important;
+}
