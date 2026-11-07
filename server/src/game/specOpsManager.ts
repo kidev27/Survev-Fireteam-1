@@ -1,8 +1,8 @@
+import { survivalLayout } from "../../../shared/defs/maps/survival/index.ts";
+import { toLocal as survivalToLocal } from "../../../shared/defs/maps/survival/layout.ts";
 import { type BulletDef, BulletDefs } from "../../../shared/defs/gameObjects/bulletDefs.ts";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs.ts";
 import {
-    LastCallBuildingType,
-    LastCallMapName,
     LastCallPlayerSpawns,
     lastCallToLocal,
 } from "../../../shared/defs/maps/lastCallLayout.ts";
@@ -3226,7 +3226,9 @@ function stairWaypoint(from: Player, stair: Stair, goingDown: boolean): Vec2 {
     const far = goingDown ? down : up;
     const through = goingDown ? stair.downDir : v2.neg(stair.downDir);
     if (from.layer >= 2 || onStairCollision(from.pos, from.rad + 0.15, stair)) {
-        const past = v2.add(far, v2.mul(through, 2.0));
+        const past = survivalLayout(from.game.config.mapName)
+            ? v2.add(stair.center, v2.mul(through, stairAlongHalf(stair) + from.rad + 2.5))
+            : v2.add(far, v2.mul(through, 2.0));
         from.game.map.clampToMapBounds(past, 6);
         return past;
     }
@@ -3602,12 +3604,13 @@ function findRouteWaypoint(
     // below point at the wrong places. Walk to the farthest node of the graph path
     // that is in straight-line reach (string pulling), so bots don't flip-flop.
     if (lastCallBlock(game)) {
-        if (lastCallWalkable(game, from.pos, goal)) return undefined;
-        const path = game.specOps?.paths?.path(game, from.pos, goal, 0, 0);
+        const layer = navGroundLayer(from.layer);
+        if (lastCallWalkable(game, from.pos, goal, 1.05, layer)) return undefined;
+        const path = game.specOps?.paths?.path(game, from.pos, goal, layer, layer, from.layer);
         if (!path?.length) return undefined;
         for (let i = path.length - 1; i >= 0; i--) {
             if (v2.distance(from.pos, path[i]) < 1.2) break;
-            if (lastCallWalkable(game, from.pos, path[i])) return path[i];
+            if (lastCallWalkable(game, from.pos, path[i], 1.05, layer)) return path[i];
         }
         return path.find((p) => v2.distance(from.pos, p) >= 1.2);
     }
@@ -4234,7 +4237,9 @@ class AiBrain {
         const canSee = hasLineOfSight(player.game, player, target);
         const isBomber = !!this.loadout.suicideVest;
         const zombieMelee = isZombieClass(this.enemyClass);
-        const directClear = isPathClear(player.game, player, target.pos, 0.8);
+        const sameFloor = navGroundLayer(player.layer) === navGroundLayer(target.layer);
+        const directClear = (!survivalLayout(player.game.config.mapName) || (sameFloor && player.layer < 2))
+            && isPathClear(player.game, player, target.pos, 0.8);
         const navHit = directClear ? undefined : firstNavHit(player.game, player, target.pos);
         const blockedByStructure = !!(navHit && (navHit.isWindow || navHit.isWall));
 
@@ -4826,7 +4831,13 @@ class AiBrain {
                 }
                 if (this.doorYieldTicker <= 0) {
                     player.touchMoveActive = true;
-                    player.touchMoveDir = assaultDirect || zombieGraphRoute
+                    // The generic long probe can see a wall BEHIND a nearby target
+                    // and steer away forever. A body-clear authored-map charge stops
+                    // at the target rather than treating that farther wall as a detour.
+                    const authoredZombieCharge = zombieMelee && directClear && sameFloor
+                        && !!survivalLayout(player.game.config.mapName)
+                        && lastCallWalkable(player.game, player.pos, target.pos, player.rad, navGroundLayer(player.layer));
+                    player.touchMoveDir = assaultDirect || zombieGraphRoute || authoredZombieCharge
                         ? v2.normalizeSafe(move)
                         : steerAroundWalls(
                             player.game,
@@ -4984,6 +4995,7 @@ class AiBrain {
             && !target.downed
             && !isBomber
             && dist < AiMeleeAttackRange
+            && util.sameLayer(player.layer, target.layer)
         ) {
             if (player.curWeapIdx !== GameConfig.WeaponSlot.Melee) {
                 player.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
@@ -6050,7 +6062,7 @@ export class SpecOpsManager implements PracticeHost {
         const owed = earned + this.zombiePendingDrops;
         if (!owed) return;
 
-        if (!lastCallPosReachable(this.game, victim.pos)) {
+        if (!lastCallPosReachable(this.game, victim.pos, undefined, util.toGroundLayer(victim.layer))) {
             // Somewhere players can't reach: hand it to the next zombie that dies in play.
             this.zombiePendingDrops = owed;
             return;
@@ -6378,14 +6390,20 @@ export class SpecOpsManager implements PracticeHost {
     }
 
     private relocateMysteryBox(box: Obstacle): void {
+        const authored = survivalLayout(this.game.config.mapName);
+        const open = authored ? lastCallOpenZones(this.game) : undefined;
         const spots = this.game.map.obstacles.filter((obstacle) =>
             obstacle.type === "zombie_mystery_box_spot"
-            && v2.distance(obstacle.pos, box.pos) > 4
+            && (obstacle.layer !== box.layer || v2.distance(obstacle.pos, box.pos) > 4)
+            && (!authored || lastCallPosReachable(this.game, obstacle.pos, open, obstacle.layer))
         );
         if (!spots.length) return;
         const destination = spots[Math.floor(util.random(0, spots.length))];
+        box.layer = destination.layer;
         box.updatePos(destination.pos);
         box.updateCollider();
+        box.setDirty();
+        this.paths = undefined;
         this.game.playerBarn.addMapPing("ping_unlock", box.pos);
     }
 
@@ -6460,6 +6478,7 @@ export class SpecOpsManager implements PracticeHost {
     tryUseMysteryBox(player: Player, box: Obstacle): boolean {
         if (!this.zombieMode || box.type !== "zombie_mystery_box" || !box.button) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
+        if (!util.sameLayer(player.layer, box.layer)) return false;
         if (!collider.intersectCircle(box.collider, player.pos, box.interactionRad + player.rad)) {
             return false;
         }
@@ -6492,6 +6511,7 @@ export class SpecOpsManager implements PracticeHost {
         const cost = zombieBuyGateCost(gate.type);
         if (!this.zombieMode || cost === undefined || !gate.button) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
+        if (!util.sameLayer(player.layer, gate.layer)) return false;
         if (!collider.intersectCircle(gate.collider, player.pos, gate.interactionRad + player.rad)) {
             return false;
         }
@@ -6512,6 +6532,7 @@ export class SpecOpsManager implements PracticeHost {
             || !powerSwitch.button?.canUse
         ) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
+        if (!util.sameLayer(player.layer, powerSwitch.layer)) return false;
         if (
             !collider.intersectCircle(
                 powerSwitch.collider,
@@ -6541,6 +6562,7 @@ export class SpecOpsManager implements PracticeHost {
         const offer = zombiePerkMachine(machine.type);
         if (!this.zombieMode || !offer || !machine.button?.canUse) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
+        if (!util.sameLayer(player.layer, machine.layer)) return false;
         if (this.buyCooldown.get(player.__id)) return false;
         if (
             !collider.intersectCircle(
@@ -6633,6 +6655,7 @@ export class SpecOpsManager implements PracticeHost {
             || !machine.button?.canUse
         ) return false;
         if (player.specOpsAi || player.dead || player.downed || player.disconnected) return false;
+        if (!util.sameLayer(player.layer, machine.layer)) return false;
         if (!collider.intersectCircle(machine.collider, player.pos, machine.interactionRad + player.rad)) {
             return false;
         }
@@ -6730,19 +6753,22 @@ export class SpecOpsManager implements PracticeHost {
         }
     }
 
-    /** Next free lobby spawn on Last Call (lastCallLayout.ts), or undefined on other maps. */
+    /** Authored squad spawn points; new maps and After Hours retain their separate layouts. */
     private lastCallPlayerSpawn(): Vec2 | undefined {
-        if (!this.zombieMode || this.game.config.mapName !== LastCallMapName) return undefined;
-        const complex = this.game.map.buildings.find((b) => b.type === LastCallBuildingType);
+        if (!this.zombieMode) return undefined;
+        const layout = survivalLayout(this.game.config.mapName);
+        const complex = lastCallBlock(this.game);
         if (!complex) return undefined;
-        const spots = LastCallPlayerSpawns.map((p) => v2.add(complex.pos, lastCallToLocal(p.x, p.y)));
+        const spots = layout
+            ? layout.spawns.map(p => v2.add(complex.pos, survivalToLocal(layout, p)))
+            : LastCallPlayerSpawns.map(p => v2.add(complex.pos, lastCallToLocal(p.x, p.y)));
         const taken = this.livingHumans();
-        const free = spots.find((spot) => taken.every((h) => v2.distance(h.pos, spot) > 1.5));
+        const free = spots.find(spot => taken.every(h => v2.distance(h.pos, spot) > 1.5));
         return free ?? spots[taken.length % spots.length];
     }
 
     private configureLastCallSystems(): void {
-        if (!this.zombieMode || this.game.config.mapName !== "specops_complex") return;
+        if (!this.zombieMode || !lastCallBlock(this.game)) return;
         this.zombiePowerOn = false;
         for (const obstacle of this.game.map.obstacles) {
             if (obstacle.type === ZombiePackAPunchType && obstacle.button) {
@@ -8228,11 +8254,11 @@ export class SpecOpsManager implements PracticeHost {
         indexInSquad = 0,
         squadSize = 1,
     ): Vec2 | undefined {
-        if (this.zombieMode && this.game.config.mapName === "specops_complex") {
+        if (this.zombieMode && lastCallBlock(this.game)) {
             // Zombies climb in through the windows (and manholes) of opened rooms only.
             const open = lastCallOpenZones(this.game);
             const entries = this.game.map.obstacles.filter((obstacle) =>
-                obstacle.type === "zombie_spawn_point" && lastCallPosReachable(this.game, obstacle.pos, open)
+                obstacle.type === "zombie_spawn_point" && obstacle.layer === 0 && lastCallPosReachable(this.game, obstacle.pos, open)
             );
             const start = entries.length
                 ? (indexInSquad + this.waveSpawnPulseIndex * 3) % entries.length
@@ -8250,6 +8276,9 @@ export class SpecOpsManager implements PracticeHost {
                     }
                 }
             }
+            // New layouts defer spawning when authored entries are full.
+            // After Hours retains its existing in-room fallback for crowded windows.
+            if (survivalLayout(this.game.config.mapName)) return undefined;
         }
 
         const map = this.game.map;
@@ -8706,7 +8735,7 @@ export class SpecOpsManager implements PracticeHost {
     private placeStations(): void {
         if (this.practice) return;
         if (this.stationsPlaced || !this.operatorSpawn) return;
-        if (this.zombieMode && this.game.config.mapName === "specops_complex") {
+        if (this.zombieMode && lastCallBlock(this.game)) {
             // Last Call has authored wall buys and stations from the layout PDF.
             this.stationsPlaced = true;
             this.game.map.serializeMapMsg();

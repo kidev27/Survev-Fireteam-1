@@ -1184,7 +1184,7 @@
   "lb-run-metrics": "Stats shown are from the ranked run. Downs = times downed.",
   "lb-team": "Team",
   "lb-mode-desc-fireteam": "Soldier waves on outdoor maps",
-  "lb-mode-desc-zombies": "Zombie waves in After Hours",
+  "lb-mode-desc-zombies": "Zombie waves across survival maps",
   "lb-run": "run",
   "lb-runs": "runs"
 }

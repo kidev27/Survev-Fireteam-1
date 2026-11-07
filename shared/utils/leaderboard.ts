@@ -4,7 +4,7 @@ import type { LeaderboardCombatStats, LeaderboardMember, LeaderboardResponse } f
 /** Leaderboard sections. Each game mode saves runs under its own map id. */
 export const LeaderboardModes = [
     { key: "fireteam", mapId: MapId.SpecOps, label: "Fireteam", desc: "Soldier waves on outdoor maps" },
-    { key: "zombies", mapId: MapId.Zombies, label: "Zombies", desc: "Zombie waves in After Hours" },
+    { key: "zombies", mapId: MapId.Zombies, label: "Zombies", desc: "Zombie waves across survival maps" },
 ] as const;
 
 export type LeaderboardModeKey = (typeof LeaderboardModes)[number]["key"];
