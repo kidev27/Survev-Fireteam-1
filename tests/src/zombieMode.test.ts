@@ -35,7 +35,7 @@ import {
     ZombiePackAPunchType,
 } from "../../shared/defs/maps/zombiePackAPunch.ts";
 import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
-import { ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/maps/zombiePerks.ts";
+import { zombiePerkMachine, ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/maps/zombiePerks.ts";
 import {
     isZombiePowerUpType,
     ZombieNukeCash,
@@ -1767,4 +1767,143 @@ test("Pack-a-Punch specials: Vector lightning only on every Nth hit of a held tr
         const expected = hit % every === 0 || (stunEvery > 0 && hit % stunEvery === 0) ? 1 : 0;
         expect(fire(), `hold hit ${hit}`).toBe(expected);
     }
+});
+
+/** Players (1 = solo game) standing at the Quick Revive machine with plenty of cash. */
+function quickReviveGame(humans: number) {
+    const game = createGame(humans > 1 ? TeamMode.Duo : TeamMode.Solo, "specops_complex");
+    const players = Array.from({ length: humans }, (_, i) => game.playerBarn.addTestPlayer({ name: `P${i}` }));
+    game.update(0.1);
+    const ops = game.specOps!;
+    const machine = game.map.obstacles.find((o) => o.type === "zombie_perk_machine_quick_revive")!;
+    expect(machine).toBeDefined();
+    const front = v2.add(machine.pos, v2.create(0, -(machine.interactionRad - 0.2)));
+    const msgs: Array<{ player: string; type: number; item: string }> = [];
+    for (const p of players) {
+        v2.set(p.pos, front);
+        game.grid.updateObject(p);
+        ops.grantCash(p, 10_000);
+        const send = p.client.sendMsg.bind(p.client);
+        p.client.sendMsg = (type, msg) => {
+            if (type === net.MsgType.Pickup) {
+                const m = msg as net.PickupMsg;
+                msgs.push({ player: p.name, type: m.type, item: m.item });
+            }
+            send(type, msg);
+        };
+    }
+    const offer = zombiePerkMachine(machine.type)!;
+    const glow = () =>
+        game.decalBarn.decals.find((d) =>
+            d.type === "zombie_perk_glow_quick_revive" && v2.length(v2.sub(d.pos, machine.pos)) < 4
+        );
+    /** Buy, then "use" it (drop the perk) so the next buy is allowed. */
+    const buyAndUse = (p: (typeof players)[number]) => {
+        ops["buyCooldown"].delete(p.__id);
+        const ok = ops.tryBuyZombiePerk(p, machine);
+        if (ok) p.removePerk(offer.perk);
+        return ok;
+    };
+    return { game, ops, players, machine, offer, msgs, glow, buyAndUse };
+}
+
+test("Quick Revive: each player can buy it only maxBuys times (co-op machine stays on)", () => {
+    const { ops, players, machine, offer, msgs, glow, buyAndUse } = quickReviveGame(2);
+    const [a, b] = players;
+    expect(offer.perk).toBe("self_revive");
+    expect(offer.maxBuys).toBe(3);
+    for (let i = 0; i < offer.maxBuys!; i++) expect(buyAndUse(a), `buy ${i + 1}`).toBe(true);
+    expect(ops.zombiePerkBuyCount(a, offer.perk)).toBe(offer.maxBuys);
+
+    const cash = a.specOpsCash;
+    expect(buyAndUse(a)).toBe(false);
+    expect(a.specOpsCash).toBe(cash);
+    expect(msgs).toContainEqual({ player: a.name, type: net.PickupMsgType.PerkNoUsesLeft, item: offer.perk });
+
+    // Co-op: the machine stays on and the other player still has all their buys.
+    expect(machine.button!.canUse).toBe(true);
+    expect(glow()!.lifeTime).toBeGreaterThan(1e6);
+    expect(buyAndUse(b)).toBe(true);
+    expect(ops.zombiePerkBuyCount(b, offer.perk)).toBe(1);
+});
+
+test("Quick Revive: in solo the machine powers down after the last buy", () => {
+    const { game, players, machine, offer, glow, buyAndUse } = quickReviveGame(1);
+    const [a] = players;
+    // Owning it doesn't count as a use; only buys do.
+    for (let i = 0; i < offer.maxBuys! - 1; i++) expect(buyAndUse(a)).toBe(true);
+    expect(machine.button!.canUse).toBe(true);
+    expect(glow()).toBeDefined();
+    expect(buyAndUse(a)).toBe(true);
+
+    expect(machine.button!.canUse).toBe(false);
+    game.update(0.1);
+    expect(glow()).toBeUndefined();
+    // Powered down: nothing more to buy, and the def has a dark sprite for it.
+    expect(buyAndUse(a)).toBe(false);
+    const def = MapObjectDefs.typeToDef(machine.type, "obstacle");
+    expect(def.button?.offImg).toBe("map-zombie-perk-quick-revive-off.img");
+    expect(machine.button!.canUse).toBe(false);
+});
+
+test("Perk machines without maxBuys stay unlimited", () => {
+    for (const type of ZombiePerkMachineTypes) {
+        const offer = zombiePerkMachine(type)!;
+        if (offer.perk === "self_revive") continue;
+        expect(offer.maxBuys, type).toBeUndefined();
+    }
+});
+
+/** Zombies duo: A has every machine perk (and, optionally, Quick Revive), B stays up. */
+function downedPerksGame(withQuickRevive: boolean, mapName = "specops_complex") {
+    const game = createGame(TeamMode.Duo, mapName);
+    const a = game.playerBarn.addTestPlayer({ name: "A" });
+    const b = game.playerBarn.addTestPlayer({ name: "B" });
+    game.update(0.1);
+    const baseMaxHealth = a.maxHealth;
+    const perks = ZombiePerkMachineTypes
+        .map((type) => ZombiePerkMachines[type].perk)
+        .filter((perk) => perk !== "self_revive");
+    for (const perk of perks) a.addPerk(perk, false);
+    if (withQuickRevive) a.addPerk("self_revive", false);
+    a.health = a.maxHealth;
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47_pap", 45);
+    game.specOps!.grantCash(a, 1234);
+    const knock = () =>
+        a.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0) });
+    return { game, a, b, perks, knock, baseMaxHealth };
+}
+
+test("Zombies: going down loses every perk, but keeps guns and cash", () => {
+    const { a, perks, knock, baseMaxHealth } = downedPerksGame(false);
+    expect(perks.length).toBeGreaterThan(0);
+    expect(a.maxHealth).toBeGreaterThan(baseMaxHealth);
+    const cash = a.specOpsCash;
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.length).toBe(0);
+    for (const perk of perks) expect(a.hasPerk(perk), perk).toBe(false);
+    // Juggernog's extra health goes with it.
+    expect(a.maxHealth).toBe(baseMaxHealth);
+    expect(a.weapons[GameConfig.WeaponSlot.Primary].type).toBe("ak47_pap");
+    expect(a.specOpsCash).toBe(cash);
+});
+
+test("Zombies: Quick Revive survives the down long enough to get up, then is spent", () => {
+    const { game, a, knock } = downedPerksGame(true);
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.map((p) => p.type)).toEqual(["self_revive"]);
+    game.step(GameConfig.player.reviveDuration + 0.2);
+    expect(a.downed).toBe(false);
+    expect(a.dead).toBe(false);
+    expect(a.perks.length).toBe(0);
+});
+
+test("Fireteam: going down still keeps perks (zombies-only rule)", () => {
+    const { a, perks, knock } = downedPerksGame(false, FireteamMapPool[0]);
+    expect(a.perks.length).toBe(perks.length);
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.length).toBe(perks.length);
 });

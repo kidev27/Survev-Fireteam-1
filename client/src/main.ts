@@ -30,6 +30,7 @@ import { Game } from "./game.ts";
 import {
     advancedDefaultsForQuality,
     clampRenderScale,
+    COMMUNITY_ANNOUNCEMENT_ENABLED,
     COMMUNITY_ANNOUNCEMENT_SNOOZE_MS,
     COMMUNITY_ANNOUNCEMENT_VERSION,
     parseGraphicsQuality,
@@ -565,6 +566,7 @@ export class Application {
     }
 
     private shouldShowCommunityAnnouncement() {
+        if (!COMMUNITY_ANNOUNCEMENT_ENABLED) return false;
         try {
             if (sessionStorage.getItem(this.communityAnnounceSessionKey()) === "1") {
                 return false;
@@ -887,6 +889,8 @@ export class Application {
     /** Fill the Map dropdown for the selected mode and hide what that mode can't use. */
     updateHomeModeFields() {
         const mode = this.homeMode();
+        // Menu theme colors follow the mode (specops-menu.css, body[data-home-mode]).
+        document.body.dataset.homeMode = mode;
         const options: Array<{ value: string; text: string }> = [];
         let saved = "";
         if (mode === "practice") {

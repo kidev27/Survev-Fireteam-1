@@ -1878,6 +1878,13 @@ export class Game {
                         const name = this.m_localization.translate(`game-${msg.item}`);
                         this.m_ui2Manager.displayPickupText(`${name}: ${papSpecial.label}`);
                     }
+                } else if (msg.type == net.PickupMsgType.PerkNoUsesLeft && msg.item) {
+                    // "Quick Revive: no uses left"
+                    this.m_ui2Manager.displayPickupText(
+                        `${this.m_localization.translate(`game-${msg.item}`)}: ${
+                            this.m_localization.translate("game-perk-no-uses-left")
+                        }`,
+                    );
                 } else {
                     this.m_ui2Manager.displayPickupMessage(msg.type);
                 }

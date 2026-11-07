@@ -313,7 +313,7 @@ function lastCallDefs(): Record<string, MapObjectDef> {
         height: 1,
     });
 
-    const perkMachine = (sprite: string, mapColor: number): ObstacleDef => ({
+    const perkMachine = (sprite: string, mapColor: number, offSprite?: string): ObstacleDef => ({
         ...lastCallSolidBlock({
             extents: v2.create(2.15 * PerkMachineScale, 1.35 * PerkMachineScale),
             height: 1,
@@ -331,6 +331,8 @@ function lastCallDefs(): Record<string, MapObjectDef> {
             useDelay: 0,
             useDir: v2.create(0, -1),
             useImg: sprite,
+            // Shown when the machine is powered down (button.canUse = false).
+            ...(offSprite ? { offImg: offSprite } : {}),
             sound: { on: "perk_pickup_01", off: "perk_pickup_01" },
         },
     });
@@ -369,7 +371,11 @@ function lastCallDefs(): Record<string, MapObjectDef> {
 
     defs.zombie_perk_machine_juggernog = perkMachine("map-zombie-perk-juggernog.img", 0xb52b32);
     defs.zombie_perk_machine_speed_cola = perkMachine("map-zombie-perk-speed-cola.img", 0x2c5d91);
-    defs.zombie_perk_machine_quick_revive = perkMachine("map-zombie-perk-quick-revive.img", 0x55c8d0);
+    defs.zombie_perk_machine_quick_revive = perkMachine(
+        "map-zombie-perk-quick-revive.img",
+        0x55c8d0,
+        "map-zombie-perk-quick-revive-off.img",
+    );
     defs.zombie_perk_machine_stamin_up = perkMachine("map-zombie-perk-stamin-up.img", 0x72932e);
     defs.zombie_perk_machine_double_tap = perkMachine("map-zombie-perk-double-tap.img", 0xcf6a24);
 
