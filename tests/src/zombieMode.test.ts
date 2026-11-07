@@ -1853,3 +1853,57 @@ test("Perk machines without maxBuys stay unlimited", () => {
         expect(offer.maxBuys, type).toBeUndefined();
     }
 });
+
+/** Zombies duo: A has every machine perk (and, optionally, Quick Revive), B stays up. */
+function downedPerksGame(withQuickRevive: boolean, mapName = "specops_complex") {
+    const game = createGame(TeamMode.Duo, mapName);
+    const a = game.playerBarn.addTestPlayer({ name: "A" });
+    const b = game.playerBarn.addTestPlayer({ name: "B" });
+    game.update(0.1);
+    const baseMaxHealth = a.maxHealth;
+    const perks = ZombiePerkMachineTypes
+        .map((type) => ZombiePerkMachines[type].perk)
+        .filter((perk) => perk !== "self_revive");
+    for (const perk of perks) a.addPerk(perk, false);
+    if (withQuickRevive) a.addPerk("self_revive", false);
+    a.health = a.maxHealth;
+    a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47_pap", 45);
+    game.specOps!.grantCash(a, 1234);
+    const knock = () =>
+        a.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0) });
+    return { game, a, b, perks, knock, baseMaxHealth };
+}
+
+test("Zombies: going down loses every perk, but keeps guns and cash", () => {
+    const { a, perks, knock, baseMaxHealth } = downedPerksGame(false);
+    expect(perks.length).toBeGreaterThan(0);
+    expect(a.maxHealth).toBeGreaterThan(baseMaxHealth);
+    const cash = a.specOpsCash;
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.length).toBe(0);
+    for (const perk of perks) expect(a.hasPerk(perk), perk).toBe(false);
+    // Juggernog's extra health goes with it.
+    expect(a.maxHealth).toBe(baseMaxHealth);
+    expect(a.weapons[GameConfig.WeaponSlot.Primary].type).toBe("ak47_pap");
+    expect(a.specOpsCash).toBe(cash);
+});
+
+test("Zombies: Quick Revive survives the down long enough to get up, then is spent", () => {
+    const { game, a, knock } = downedPerksGame(true);
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.map((p) => p.type)).toEqual(["self_revive"]);
+    game.step(GameConfig.player.reviveDuration + 0.2);
+    expect(a.downed).toBe(false);
+    expect(a.dead).toBe(false);
+    expect(a.perks.length).toBe(0);
+});
+
+test("Fireteam: going down still keeps perks (zombies-only rule)", () => {
+    const { a, perks, knock } = downedPerksGame(false, FireteamMapPool[0]);
+    expect(a.perks.length).toBe(perks.length);
+    knock();
+    expect(a.downed).toBe(true);
+    expect(a.perks.length).toBe(perks.length);
+});

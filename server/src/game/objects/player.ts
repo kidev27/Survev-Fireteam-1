@@ -3065,6 +3065,11 @@ export class Player extends BaseGameObject {
             this.game.specOps?.onEnemyDowned(this);
         }
 
+        // Zombies (BO2 style): going down costs every perk.
+        if (this.game.specOps?.zombieMode && !this.specOpsAi) {
+            this.game.specOps.onZombiePlayerDowned(this);
+        }
+
         // lone survivr can be given on knock or kill
         if (this.game.map.factionMode) {
             this.team!.checkAndApplyLastMan();

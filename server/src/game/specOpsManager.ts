@@ -6856,6 +6856,18 @@ export class SpecOpsManager implements PracticeHost {
     }
 
     /** Enemy medic/lieutenant should react when a squadmate is knocked. */
+    /**
+     * Zombies: a downed player loses every perk, like BO2. Quick Revive
+     * (self_revive) stays until the revive finishes, since it's what lets them
+     * get up; the revive code removes it then. Guns and cash are kept.
+     */
+    onZombiePlayerDowned(player: Player): void {
+        const lost = player.perks.filter((perk) => perk.type !== "self_revive").map((perk) => perk.type);
+        if (!lost.length) return;
+        for (const type of lost) player.removePerk(type);
+        player.setDirty();
+    }
+
     onEnemyDowned(victim: Player): void {
         if (victim.specOpsKind !== "enemy") return;
         this.alertSquad(victim.pos, victim, 24);
