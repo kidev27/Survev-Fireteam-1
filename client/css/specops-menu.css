@@ -762,6 +762,8 @@
   border: 1px solid rgba(107, 143, 60, 0.28);
   border-radius: 8px;
   display: flex;
+  /* overflow: hidden lets it shrink to 0 when a full (100-row) board fills the sidebar. */
+  flex-shrink: 0;
   gap: 0;
   overflow: hidden;
 }

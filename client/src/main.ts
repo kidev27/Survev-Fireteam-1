@@ -30,6 +30,7 @@ import { Game } from "./game.ts";
 import {
     advancedDefaultsForQuality,
     clampRenderScale,
+    COMMUNITY_ANNOUNCEMENT_ENABLED,
     COMMUNITY_ANNOUNCEMENT_SNOOZE_MS,
     COMMUNITY_ANNOUNCEMENT_VERSION,
     parseGraphicsQuality,
@@ -565,6 +566,7 @@ export class Application {
     }
 
     private shouldShowCommunityAnnouncement() {
+        if (!COMMUNITY_ANNOUNCEMENT_ENABLED) return false;
         try {
             if (sessionStorage.getItem(this.communityAnnounceSessionKey()) === "1") {
                 return false;
