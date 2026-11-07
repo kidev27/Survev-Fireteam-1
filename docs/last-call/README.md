@@ -1,87 +1,100 @@
-# Last Call layout (Zombie Survival `specops_complex`)
+# After Hours (Zombie Survival `specops_complex`)
 
-Last Call is the motel, nightclub and parking-garage map in Zombie Survival.
-This update rebuilds its block from a single layout file, with one painted
-night-time floor. The rules are unchanged: buy gates, power, the mystery box,
-the upgrade bench and zombie waves all run through the existing Zombie Survival
-code in `SpecOpsManager`.
+After Hours is a roadside motel and garage during a nighttime zombie outbreak.
+The motor court replaces Last Call's nightclub-and-pool theme. Warm reception
+lighting, worn guest rooms, a diner, maintenance rooms and a service garage
+surround a parking courtyard with the **After Hours Motel** sign as its landmark.
 
-![Composited preview](preview.png)
+The map keeps the existing purchase and power progression. Its internal map,
+building, atlas, asset and `LastCall*` identifiers remain unchanged for
+compatibility; player-facing names use After Hours.
 
-*The preview is put together from the map's SVGs and the generated object
-positions, not captured from the game client.*
+## Layout and progression
 
-## What changed
+The nine zones occupy a 217.5 × 172.5 block inside the existing 256 × 208 map:
+reception (`lobby`), storage, motor court (`courtyard`), diner, service alley,
+guest wing (`wing`), maintenance hall (`club`), manager's office and garage.
 
-- **Layout:** nine rooms in a 217.5 × 172.5 block (the 145 × 115 plan scaled
-  1.5×): lobby, storage, courtyard, neon diner, alley, motel wing, Club
-  Paradiso, the manager's office and the parking garage. The map is 256 × 208.
-  - Doorways are 6 units wide.
-  - Motel room doorways are open. Hinged doors used to snag zombies.
-  - Furniture and cover are placed for close fights in the style of Hotline
-    Miami.
-- **Art:** one generated floor image draws the walls, floors, boarded windows,
-  door prices, box spots and manholes. It's built from the same plan as the
-  collision walls, so the two can't drift apart. Shutters, the freight gate,
-  pillars, cars and dumpsters have their own sprites (the `lastcall` atlas).
-- **Gates:** `zombie_buy_gate_*` are now yellow-and-black rolling shutters
-  (6 × 1.2). `zombie_power_gate` is a pink freight gate. `zombie_garage_car`
-  uses the new car sprite.
-- **Zombie spawns:** zombies only climb in through windows and manholes in
-  rooms the squad has opened. Rooms are tracked by walking the plan's doorways
-  from where the players are, so they can never appear behind an unbought
-  shutter, even when an earlier path check would have allowed it. A window
-  can take a few zombies at once, and windows close to players are only used
-  when every other one is taken.
-- **Zombie routing on this map:**
-  - extra waypoints on a 6-unit grid and around props;
-  - linked nodes through every opened doorway;
-  - nav links a zombie can't fit through are dropped;
-  - path ends are never accepted from the room next door;
-  - path-cache keys include the room at each end;
-  - zombies walk to the farthest waypoint they can reach in a straight line.
+Reception offers three purchases: the motor court for 750, diner for 1000,
+or storage for 750. Storage's open connection into the alley provides an
+alternative approach to the courtyard and garage. The diner–guest-wing route
+forms the west loop; maintenance, the office and the garage form the east loop
+once the power gate opens. Gate prices and all power, perk, mystery-box,
+Pack-a-Punch and wave rules are unchanged.
 
-  All of this only switches on for `specops_complex`.
+The guest rooms have alternating widths instead of identical boxes. The
+maintenance hall contains smaller parts and laundry rooms with open doorways,
+so its fighting space has corners and narrower approaches. These subdivisions
+stay within their parent zone and add no purchases. Buy gates and service-room
+doorways are 6 game units wide; guest-room doorways remain 4 units wide and
+have no hinged doors to snag zombies.
 
-Removed because nothing uses them any more: the old 10-unit grid builder
-(`createZombieBranchingComplex`), `zombie_pool_edge_10`, `zombie_entry_window`,
-`createZombieBuyGate`, and the `map-zombie-floor-*` and `map-zombie-garage-car`
-SVGs (these were in the shared atlas, which every map loads).
+Cars, the sign island, service fixtures and furniture break up long sightlines
+without filling the central routes with clutter. The shared layout defines
+solid props; decorative floor marks, oil, paper and blood do not block movement.
+
+## Art and collision
+
+`shared/defs/maps/lastCallLayout.ts` is the source of truth for zones, internal
+rooms, doorways, windows, stations, props and zombie entries. The building
+and art generator read the same scaled positions and wall segments.
+
+The generated floor uses muted asphalt, worn concrete, faded paint, quiet
+room textures and boarded windows. Gate thresholds, machine areas and zombie
+entries remain legible. Painted fixtures have matching collision; separate
+sprites cover cars, shutters, the power gate, pillars and dumpsters. The motel
+sign's light flickers through a game decal rather than an animated SVG.
+
+Zombies enter only through the windows and manholes of zones connected to a
+living operator through opened gates. Internal room doorways use the same
+portal navigation as the larger zone connections. The existing map-specific
+navigation retains its 6-unit waypoint grid, body-clearance checks,
+room-aware path cache and string-pulled movement.
 
 ## Files
 
-| File | What it is |
-|------|------------|
-| `shared/defs/maps/lastCallLayout.ts` | The plan: rooms, doorways, windows, stations, props, box spots. Edit this first. |
-| `shared/defs/lastCallObjectDefs.ts` | Walls and props generated from the plan, and the `zombie_branching_complex_01` building. |
-| `server/src/game/lastCallNav.ts` | Which rooms are open, doorway nav nodes, the "does a zombie fit" check. |
-| `scripts/lastcall/buildArt.ts` | Regenerates the floor and prop SVGs from the plan. |
-| `client/atlas-builder/defs/lastcall.ts` | The `lastcall` atlas. |
-| `tests/src/lastCall.test.ts` | Layout, open-room and pathing tests. |
+| File | Purpose |
+|------|---------|
+| `shared/defs/maps/lastCallLayout.ts` | Layout, internal rooms, fixtures, doorways, entries and stations. Edit this first. |
+| `shared/defs/lastCallObjectDefs.ts` | Generated wall collision, prop definitions, sign light and building. |
+| `scripts/lastcall/buildArt.ts` | Deterministically generates the floor and prop SVGs. |
+| `client/atlas-builder/defs/lastcall.ts` | Existing atlas and compatible asset names. |
+| `server/src/game/lastCallNav.ts` | Open-zone traversal, doorway portals and body-clearance checks. |
+| `tests/src/lastCall.test.ts` | Layout, collision, unopened-zone spawn and complete navigation checks. |
+| `tests/src/zombieMode.test.ts` | Existing zombie rules, gate, power, perk and Pack-a-Punch regressions. |
 
-## Changing the size
+![After Hours motor court layout](preview.png)
 
-`LastCallScale` in `lastCallLayout.ts` sets how big the rooms are (1 = the
-original 145 × 115 plan, 1.5 now).
-- **Rooms** grow, and so do built-in fixtures (pool, bar, DJ booth, counters,
-  desks).
-- **Furniture, stations, cars and the box** keep their real size and move with
-  the room. Anything within 4.5 units of a wall stays the same distance from
-  that wall.
-- **Doorways and windows** keep their width, so shutters stay chokepoints.
+`preview.png` is a composition of the generated floor and actual object sprites,
+not a game screenshot. The delivered review files also include a live-client
+capture.
 
-After changing it:
-1. Set `baseWidth`/`baseHeight` of `ZombieBranchingComplex` in
-   `zombieIndoorDefs.ts` to at least the block size plus about 40.
-2. Run `bun scripts/lastcall/buildArt.ts`.
-3. Update the map-size line in `zombieMode.test.ts`.
+## Editing and regeneration
 
-The floor image is drawn at 16 / LastCallScale px per unit, so its texture size
-doesn't grow with the map.
+Base-plan coordinates have x increasing rightward and y increasing downward.
+`LastCallScale` is 1.5. Rooms and built-in fixtures scale with the plan;
+furniture, cars, stations and mystery boxes keep their game size. Props close
+to a wall keep their wall clearance when the plan scales. Door and window
+widths remain fixed.
 
-## Changing the map
+After moving walls or fixtures:
 
-1. Edit the base tables in `lastCallLayout.ts`. Coordinates are base-plan
-   units: x to the right, y down, origin at the block's top-left corner.
-2. Run `bun scripts/lastcall/buildArt.ts` so the floor art matches the new walls.
-3. Run `bun run lint`, then the tests: `cd tests && bun run test lastCall zombieMode`.
+```sh
+bun scripts/lastcall/buildArt.ts
+cd tests
+bun run test --run lastCall zombieMode
+```
+
+The tests exercise the generated game collision, rather than relying on the
+floor image: every wall and spawn entry is checked, every opened doorway must
+fit a zombie, and complete paths include their final approach into every zone,
+from every entry, and to station and mystery-box interaction areas. Initial
+waves must remain inside the unopened reception area. The zombie-mode suite
+also checks that power opens the freight gate and enables Pack-a-Punch.
+
+For a size change, keep `baseWidth`/`baseHeight` in `zombieIndoorDefs.ts` large
+enough for the block and street apron, then update the map-size assertion in
+`zombieMode.test.ts`. Floor raster density is shared through `LastCallFloorPixelsPerUnit` (24 /
+`LastCallScale`), giving a 3800 × 3080 image at the authored scale. The floor
+sprite applies the inverse density so world dimensions stay exact and the
+texture fits the existing 4096-pixel atlas limit.

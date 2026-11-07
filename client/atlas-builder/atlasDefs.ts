@@ -12,6 +12,7 @@ import { PotatoAtlas } from "./defs/potato.ts";
 import { SavannahAtlas } from "./defs/savannah.ts";
 import { SharedAtlas } from "./defs/shared.ts";
 import { SnowAtlas } from "./defs/snow.ts";
+import { SurvivalAtlases } from "./defs/survival.ts";
 import { TurkeyAtlas } from "./defs/turkey.ts";
 import { WoodsAtlas } from "./defs/woods.ts";
 
@@ -46,6 +47,8 @@ export const Atlases: Record<Atlas, AtlasDef> = {
     turkey: TurkeyAtlas,
     beach: BeachAtlas,
     lastcall: LastCallAtlas,
+    highwater: SurvivalAtlases.highwater,
+    deadair: SurvivalAtlases.deadair,
 };
 export type AtlasRes = "high" | "low";
 

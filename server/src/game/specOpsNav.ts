@@ -1,3 +1,4 @@
+import { survivalLayout } from "../../../shared/defs/maps/survival/index.ts";
 import { ObjectType } from "../../../shared/net/objectSerializeFns.ts";
 import { coldet } from "../../../shared/utils/coldet.ts";
 import { collider } from "../../../shared/utils/collider.ts";
@@ -132,19 +133,23 @@ export function isWalkClear(
 }
 
 export function inferGroundLayer(game: Game, pos: Vec2, fallback: number): number {
+    const layers: number[] = [];
     const objs = game.grid.intersectCollider(collider.createCircle(pos, 0.45));
-    for (let i = 0; i < objs.length; i++) {
-        const obj = objs[i];
+    for (const obj of objs) {
         if (obj.__type !== ObjectType.Building) continue;
         const building = obj as Building;
-        for (let j = 0; j < building.zoomRegions.length; j++) {
-            const zoomIn = building.zoomRegions[j].zoomIn;
-            if (zoomIn && coldet.testPointAabb(pos, zoomIn.min, zoomIn.max)) {
-                return util.toGroundLayer(building.layer);
-            }
+        if (
+            building.zoomRegions.some(region =>
+                region.zoomIn && coldet.testPointAabb(pos, region.zoomIn.min, region.zoomIn.max)
+            )
+        ) {
+            layers.push(util.toGroundLayer(building.layer));
         }
     }
-    return util.toGroundLayer(fallback);
+    // Stacked rooms share XY; a known floor is stronger evidence than insertion order.
+    const preferred = util.toGroundLayer(fallback);
+    if (survivalLayout(game.config.mapName) && layers.includes(preferred)) return preferred;
+    return layers[0] ?? preferred;
 }
 
 /** Ground layer for pathfinding; stair transit layers keep their floor bit. */
@@ -301,7 +306,9 @@ export class MapNavGraph {
     ): Vec2[] | null {
         // Cache cells are 16 units wide; Last Call rooms are split by walls inside
         // a cell, so the room of each end is part of the key there.
-        const cacheKey = this.cacheKey(from, to, fromLayer, toLayer) + lastCallRoomKey(game, from, to);
+        const cacheKey = (survivalLayout(game.config.mapName)
+            ? `${from.x},${from.y},${fromLayer}>${to.x},${to.y},${toLayer}`
+            : this.cacheKey(from, to, fromLayer, toLayer)) + lastCallRoomKey(game, from, to, fromLayer, toLayer);
         const cached = this.pathCache.get(cacheKey);
         if (cached !== undefined) return cached;
 
@@ -309,6 +316,7 @@ export class MapNavGraph {
             fromLayer === toLayer
             && v2.distance(from, to) < 2.8
             && isWalkClear(game, from, to, fromLayer)
+            && (!survivalLayout(game.config.mapName) || lastCallWalkable(game, from, to, 1.05, fromLayer))
         ) {
             this.remember(cacheKey, []);
             return [];
@@ -321,8 +329,11 @@ export class MapNavGraph {
         // Last Call rooms sit wall to wall: an end node in the next room over must
         // not count as "arrived", or paths stop behind a wall.
         if (lastCallBlock(game)) {
-            const reachable = ends.filter((node) => isWalkClear(game, node.pos, to, toLayer));
-            if (reachable.length) ends = reachable;
+            const reachable = ends.filter((node) =>
+                isWalkClear(game, node.pos, to, toLayer)
+                && (!survivalLayout(game.config.mapName) || lastCallWalkable(game, node.pos, to, 1.05, toLayer))
+            );
+            if (reachable.length || survivalLayout(game.config.mapName)) ends = reachable;
         }
         if (onStair) this.addStairStarts(game, from, fromLayer, starts);
         if (!starts.length || !ends.length) {
@@ -340,15 +351,21 @@ export class MapNavGraph {
 
         for (let i = 0; i < starts.length; i++) {
             const node = starts[i];
-            const walk = isWalkClear(game, from, node.pos, fromLayer)
-                || v2.distance(from, node.pos) < 3.2
-                || node.kind === "stair"
-                || onStair;
-            if (!walk && node.kind !== "stair") continue;
+            const walk = survivalLayout(game.config.mapName)
+                ? node.layer === fromLayer && lastCallWalkable(game, from, node.pos, 1.05, fromLayer)
+                : isWalkClear(game, from, node.pos, fromLayer)
+                    || v2.distance(from, node.pos) < 3.2
+                    || node.kind === "stair"
+                    || onStair;
+            if (!walk && (survivalLayout(game.config.mapName) ? !onStair : node.kind !== "stair")) continue;
             const g = v2.distance(from, node.pos);
             const layerPenalty = node.layer === toLayer ? 0 : (node.kind === "stair" ? 4 : 10);
             gScore.set(node.id, g);
             heap.push(node.id, g + v2.distance(node.pos, to) + layerPenalty);
+        }
+        if (!gScore.size && survivalLayout(game.config.mapName)) {
+            this.remember(cacheKey, null);
+            return null;
         }
         if (!gScore.size) {
             const node = starts[0];
@@ -425,28 +442,36 @@ export class MapNavGraph {
     private sampleLastCall(game: Game): void {
         const block = lastCallBlock(game);
         if (!block) return;
-        for (const pos of lastCallNavPoints(game)) {
-            if (pointClear(game, pos, 0, 1.1)) this.addNode(pos, 0, "interior");
-        }
-        for (const child of block.childObjects) {
-            if (child.__type !== ObjectType.Obstacle) continue;
-            const o = child as Obstacle;
-            if (o.dead || o.destroyed || !o.collidable || o.isWall || o.isDoor) continue;
-            if (o.type.startsWith("lastcall_wall_")) continue;
-            const ring = expandAabb(toAabb(o), 2.2);
-            for (const corner of [
-                ring.min,
-                ring.max,
-                v2.create(ring.min.x, ring.max.y),
-                v2.create(ring.max.x, ring.min.y),
-            ]) {
-                if (pointClear(game, corner, 0, 1.1)) this.addNode(v2.copy(corner), 0, "interior");
+        const layers = survivalLayout(game.config.mapName) ? [0, 1] : [0];
+        for (const layer of layers) {
+            for (const pos of lastCallNavPoints(game, layer)) {
+                if (lastCallWalkable(game, pos, pos, 1.1, layer)) this.addNode(pos, layer, "interior");
             }
-        }
-        for (const [a, b] of lastCallNavPortals(game)) {
-            const ia = this.addNode(a, 0, "interior");
-            const ib = this.addNode(b, 0, "interior");
-            this.linkBoth(ia, ib, v2.distance(a, b));
+            const props = survivalLayout(game.config.mapName) ? game.map.obstacles : block.childObjects;
+            for (const child of props) {
+                if (child.__type !== ObjectType.Obstacle || util.toGroundLayer(child.layer) !== layer) continue;
+                const o = child as Obstacle;
+                if (o.dead || o.destroyed || !o.collidable || o.isWall || o.isDoor) continue;
+                if (o.type.startsWith("lastcall_wall_")) continue;
+                const ring = expandAabb(toAabb(o), 2.2);
+                for (
+                    const corner of [
+                        ring.min,
+                        ring.max,
+                        v2.create(ring.min.x, ring.max.y),
+                        v2.create(ring.max.x, ring.min.y),
+                    ]
+                ) {
+                    if (lastCallWalkable(game, corner, corner, 1.1, layer)) {
+                        this.addNode(v2.copy(corner), layer, "interior");
+                    }
+                }
+            }
+            for (const [a, b] of lastCallNavPortals(game, layer)) {
+                const ia = this.addNode(a, layer, "interior");
+                const ib = this.addNode(b, layer, "interior");
+                this.linkBoth(ia, ib, v2.distance(a, b));
+            }
         }
     }
 
@@ -815,7 +840,9 @@ export class MapNavGraph {
             for (let i = node.neighbors.length - 1; i >= 0; i--) {
                 const other = this.nodes[node.neighbors[i]];
                 if (other.id < node.id) continue; // each edge once
-                if (other.layer !== node.layer || lastCallWalkable(game, node.pos, other.pos, rad)) continue;
+                if (other.layer !== node.layer || lastCallWalkable(game, node.pos, other.pos, rad, node.layer)) {
+                    continue;
+                }
                 node.neighbors.splice(i, 1);
                 node.costs.splice(i, 1);
                 const back = other.neighbors.indexOf(node.id);

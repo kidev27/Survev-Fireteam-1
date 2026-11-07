@@ -1,3 +1,4 @@
+import { SurvivalMapObjectDefs } from "./survivalObjectDefs.ts";
 import { FactionTeam } from "../gameConfig.ts";
 import { collider } from "../utils/collider.ts";
 import { type DeepPartial, util } from "../utils/util.ts";
@@ -36299,4 +36300,5 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     }),
     // Last Call: walls, props and the zombie_branching_complex_01 block.
     ...LastCallMapObjectDefs,
+    ...SurvivalMapObjectDefs,
 };

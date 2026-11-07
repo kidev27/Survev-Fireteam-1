@@ -7,6 +7,7 @@ import { Beach } from "./beachDefs.ts";
 import { Cobalt } from "./cobaltDefs.ts";
 import { Desert } from "./desertDefs.ts";
 import { Halloween } from "./halloweenDefs.ts";
+import { LastCallDisplayName } from "./lastCallLayout.ts";
 import { Potato } from "./potatoDefs.ts";
 import { Savannah } from "./savannahDefs.ts";
 import { Snow } from "./snowDefs.ts";
@@ -703,7 +704,7 @@ export const FireteamMapPool = [
 ] as const;
 
 /** Zombies maps: zombie rules, indoor buy-to-progress layouts. */
-export const ZombieMapPool = ["specops_complex"] as const;
+export const ZombieMapPool = ["specops_complex", "zombie_high_water", "zombie_dead_air"] as const;
 
 /** Every player-facing survival map. */
 export const SpecOpsMapPool = [...FireteamMapPool, ...ZombieMapPool] as const;
@@ -744,7 +745,9 @@ export function specOpsMapMatches(requested: string, actual: string): boolean {
 export function specOpsMapDisplayName(mapKey: string): string {
     if (isRandomFireteamMap(mapKey)) return "Random";
     if (mapKey === "specops_outdoor") return "Main";
-    if (mapKey === "specops_complex") return "Last Call";
+    if (mapKey === "specops_complex") return "After Hours";
+    if (mapKey === "zombie_high_water") return "High Water";
+    if (mapKey === "zombie_dead_air") return "Dead Air";
     const suffix = mapKey.replace(/^specops_/, "");
     if (!suffix || suffix === mapKey) return mapKey;
     return suffix.charAt(0).toUpperCase() + suffix.slice(1);

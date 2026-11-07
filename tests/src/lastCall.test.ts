@@ -3,6 +3,7 @@ import en from "../../client/src/en.json";
 import type { Game } from "../../server/src/game/game.ts";
 import { lastCallOpenZones, lastCallWalkable } from "../../server/src/game/lastCallNav.ts";
 import type { Obstacle } from "../../server/src/game/objects/obstacle.ts";
+import { MapNavGraph } from "../../server/src/game/specOpsNav.ts";
 import {
     LastCallBoxSpots,
     LastCallBuildingType,
@@ -18,6 +19,7 @@ import {
     type LastCallZoneId,
     LastCallZones,
 } from "../../shared/defs/maps/lastCallLayout.ts";
+import { ZombiePackAPunchType } from "../../shared/defs/maps/zombiePackAPunch.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
 import { TeamMode } from "../../shared/gameConfig.ts";
 import { ObjectType } from "../../shared/net/objectSerializeFns.ts";
@@ -60,12 +62,38 @@ function buy(game: Game, world: (p: Vec2) => Vec2, id: string): Obstacle {
     return gate;
 }
 
+/** Exercise the real purchase and power interactions before sampling navigation. */
+function openBlock() {
+    const context = startLastCall();
+    const { game, operator, world } = context;
+    for (const door of LastCallDoors.filter((d) => d.kind === "shutter")) buy(game, world, door.id);
+    const powerSwitch = game.map.obstacles.find((o) => o.type === "zombie_power_switch")!;
+    const back = v2.copy(operator.pos);
+    v2.set(operator.pos, powerSwitch.pos);
+    game.grid.updateObject(operator);
+    powerSwitch.interact(operator);
+    v2.set(operator.pos, back);
+    game.grid.updateObject(operator);
+    expect(game.specOps!.zombiePowerOn).toBe(true);
+    return context;
+}
+
+/** Include the final approach: a non-null path can still end across a wall. */
+function expectRoute(game: Game, from: Vec2, goal: Vec2, label: string) {
+    const path = game.specOps!.ensureNavGraph().path(game, from, goal, 0, 0);
+    expect(path, label).not.toBeNull();
+    const legs = [from, ...path!, goal];
+    for (let i = 1; i < legs.length; i++) {
+        expect(lastCallWalkable(game, legs[i - 1], legs[i], 0.9), `${label} leg ${i}`).toBe(true);
+    }
+}
+
 function inZone(zone: LastCallZoneId, p: Vec2, inset: number): boolean {
     const r = LastCallZones.find((z) => z.id === zone)!.rect;
     return p.x >= r.x0 + inset && p.x <= r.x1 - inset && p.y >= r.y0 + inset && p.y <= r.y1 - inset;
 }
 
-describe("Last Call layout", () => {
+describe("After Hours layout", () => {
     test("every doorway sits on the wall between its two zones", () => {
         for (const d of LastCallDoors) {
             if (d.kind === "room") continue;
@@ -128,7 +156,7 @@ describe("Last Call layout", () => {
     });
 });
 
-describe("Last Call rooms", () => {
+describe("After Hours rooms", () => {
     test("only rooms behind bought shutters count as open", () => {
         const { game, world } = startLastCall();
         expect([...lastCallOpenZones(game)]).toEqual(["lobby"]);
@@ -155,30 +183,71 @@ describe("Last Call rooms", () => {
         }
     });
 
-    test("AI can path from the lobby to every room once everything is open", () => {
-        const { game, operator, world } = startLastCall();
-        for (const d of LastCallDoors.filter((door) => door.kind === "shutter")) buy(game, world, d.id);
-        const powerSwitch = game.map.obstacles.find((o) => o.type === "zombie_power_switch")!;
-        v2.set(operator.pos, powerSwitch.pos);
-        game.grid.updateObject(operator);
-        powerSwitch.interact(operator);
-        expect(game.specOps!.zombiePowerOn).toBe(true);
+    test("all open doorways fit a zombie on both approaches", () => {
+        const { game, world } = openBlock();
+        for (const door of LastCallDoors) {
+            const center = doorCenter(door.id);
+            const [a, b] = door.opening.axis === "h"
+                ? [v2.create(center.x, center.y - 2.5), v2.create(center.x, center.y + 2.5)]
+                : [v2.create(center.x - 2.5, center.y), v2.create(center.x + 2.5, center.y)];
+            expect(lastCallWalkable(game, world(a), world(b), 1.1), door.id).toBe(true);
+        }
+    });
 
-        const graph = game.specOps!.ensureNavGraph();
+    test("AI can path from the lobby to every room once everything is open", () => {
+        const { game, world } = openBlock();
         const from = world(LastCallPlayerSpawns[0]);
-        for (const z of LastCallZones) {
-            const r = z.rect;
-            // probe a few points in the room, skip any that land on a prop
+        for (const zone of LastCallZones) {
+            const r = zone.rect;
             const goal = [0.5, 0.3, 0.7]
                 .map((t) => world(v2.create(r.x0 + (r.x1 - r.x0) * t, r.y0 + (r.y1 - r.y0) * t)))
-                .find((p) => lastCallWalkable(game, p, p, 1.1))!;
-            const path = graph.path(game, from, goal, 0, 0);
-            expect(path, z.id).not.toBeNull();
-            // every leg of the path fits a zombie (no cutting through walls or corners)
-            const legs = [from, ...path!];
-            for (let i = 1; i < legs.length - 1; i++) {
-                expect(lastCallWalkable(game, legs[i - 1], legs[i], 0.9), `${z.id} leg ${i}`).toBe(true);
-            }
+                .find((p) => lastCallWalkable(game, p, p, 1.1));
+            expect(goal, `${zone.id} has a clear fighting area`).toBeDefined();
+            expectRoute(game, from, goal!, zone.id);
+        }
+    });
+
+    test("every window and manhole has a complete route back to the squad", () => {
+        const { game, world } = openBlock();
+        const goal = world(LastCallPlayerSpawns[0]);
+        for (const entry of LastCallEntries) {
+            expectRoute(game, world(entry.pos), goal, `${entry.zone} entry ${entry.pos.x},${entry.pos.y}`);
+        }
+    });
+
+    test("stations have a clear reachable interaction approach", () => {
+        const { game, world } = openBlock();
+        const from = world(LastCallPlayerSpawns[0]);
+        const stations = game.map.obstacles.filter((o) =>
+            o.type.startsWith("zombie_perk_machine_")
+            || o.type === "zombie_mystery_box"
+            || o.type === "zombie_power_switch"
+            || o.type === ZombiePackAPunchType
+        );
+        expect(stations).toHaveLength(8);
+        for (const station of stations) {
+            const box = collider.toAabb(station.collider);
+            const approach = [
+                v2.create(station.pos.x, box.min.y - 1.2),
+                v2.create(station.pos.x, box.max.y + 1.2),
+                v2.create(box.min.x - 1.2, station.pos.y),
+                v2.create(box.max.x + 1.2, station.pos.y),
+            ].find((p) => {
+                if (!lastCallWalkable(game, p, p, 1.1)) return false;
+                // Each alternative is an independent route query: coarse cache cells
+                // intentionally group nearby goals, including opposite sides of a machine.
+                const path = MapNavGraph.build(game).path(game, from, p, 0, 0);
+                if (!path) return false;
+                const legs = [from, ...path, p];
+                return legs.slice(1).every((end, i) => lastCallWalkable(game, legs[i], end, 0.9));
+            });
+            expect(approach, `${station.type} has a complete path to a usable side`).toBeDefined();
+        }
+        // All relocation spots need an accessible front, including currently empty spots.
+        for (const spot of LastCallBoxSpots) {
+            const approach = world(v2.create(spot.pos.x, spot.pos.y + 3.2));
+            expect(lastCallWalkable(game, approach, approach, 1.1), `${spot.zone} box approach`).toBe(true);
+            expectRoute(game, from, approach, `${spot.zone} box approach`);
         }
     });
 });

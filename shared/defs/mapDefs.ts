@@ -40,6 +40,7 @@ import {
     SpecOpsTurkey,
     SpecOpsWoods,
 } from "./maps/specOpsDefs.ts";
+import { ZombieDeadAir, ZombieHighWater } from "./maps/survivalMapDefs.ts";
 import { testFaction, testNormal, testSpecOps, testSpecOpsBots } from "./maps/testDefs.ts";
 import { Turkey } from "./maps/turkeyDefs.ts";
 import { Woods } from "./maps/woodsDefs.ts";
@@ -63,7 +64,9 @@ export type Atlas =
     | "savannah"
     | "turkey"
     | "beach"
-    | "lastcall";
+    | "lastcall"
+    | "highwater"
+    | "deadair";
 
 const _MapDefs = {
     main: Main,
@@ -87,6 +90,8 @@ const _MapDefs = {
     beach: Beach,
     specops: SpecOps,
     specops_complex: ZombieBranchingComplex,
+    zombie_high_water: ZombieHighWater,
+    zombie_dead_air: ZombieDeadAir,
     specops_outdoor: SpecOps,
     specops_woods: SpecOpsWoods,
     specops_desert: SpecOpsDesert,
