@@ -3,6 +3,7 @@ import { util } from "../../utils/util.ts";
 import { v2 } from "../../utils/v2.ts";
 import type { MapDef } from "../mapDefs.ts";
 import type { PartialMapDef } from "./baseDefs.ts";
+import { LastCallDisplayName } from "./lastCallLayout.ts";
 import { SpecOps } from "./specOpsDefs.ts";
 
 /**
@@ -58,7 +59,7 @@ const zombieIndoorBase = util.mergeDeep(
 ) as MapDef;
 
 /**
- * Last Call's motel, nightclub and parking-garage survival block at night.
+ * After Hours' roadside motel, maintenance hall and garage at night.
  * Layout: lastCallLayout.ts; art: scripts/lastcall/buildArt.ts.
  */
 export const ZombieBranchingComplex = util.mergeDeep(
@@ -69,7 +70,7 @@ export const ZombieBranchingComplex = util.mergeDeep(
         mapId: GameConfig.MapId.Zombies,
         desc: {
             name: "Zombie Survival",
-            buttonText: "Last Call",
+            buttonText: LastCallDisplayName,
             backgroundImg: "img/main_splash.png",
         },
         assets: {
@@ -98,7 +99,7 @@ export const ZombieBranchingComplex = util.mergeDeep(
             },
             places: [
                 {
-                    name: "Last Call",
+                    name: LastCallDisplayName,
                     pos: v2.create(0.5, 0.5),
                     dontSpawnObjects: true,
                 },

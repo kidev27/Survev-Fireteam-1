@@ -1,32 +1,25 @@
 /**
- * Generates the Last Call (Zombie Survival `specops_complex`) art from
- * shared/defs/maps/lastCallLayout.ts: the painted floor of the whole block plus
- * the shutter, gate, pillar, car and dumpster sprites.
- *
+ * After Hours art, generated from the shared plan and collision definitions.
+ * Compatibility asset names remain map-lastcall-*. Re-run after layout edits:
  *   bun scripts/lastcall/buildArt.ts
- *
- * Writes SVGs into client/public/img/map/. The floor's viewBox is in game units
- * so walls, doorways and props land exactly on their collision boxes. Room
- * decor (floors, rugs, the pool, bar, DJ booth...) is drawn in base-plan units
- * inside a scale(LastCallScale) group, the same way the layout scales it.
- * Re-run after moving anything in the layout.
+ * Floors, walls, windows, thresholds and floor-painted fixtures use game units.
+ * Fixture footprints are read from the same AABBs the game uses for collision.
  */
 import fs from "node:fs";
 import path from "node:path";
+import { LastCallMapObjectDefs } from "../../shared/defs/lastCallObjectDefs.ts";
 import {
     LastCallApron,
-    LastCallBaseProps,
-    LastCallBaseZones,
     LastCallBoxSpots,
     LastCallDoors,
     LastCallEntries,
+    LastCallFloorPixelsPerUnit,
     LastCallHeight,
+    LastCallInteriorRooms,
     LastCallMotelRooms,
     LastCallPowerSwitchPos,
-    type LastCallProp,
     LastCallProps,
     type LastCallRect,
-    LastCallScale,
     lastCallWalls,
     LastCallWallThickness,
     LastCallWidth,
@@ -35,390 +28,401 @@ import {
 } from "../../shared/defs/maps/lastCallLayout.ts";
 
 const outDir = path.join(import.meta.dirname, "../../client/public/img/map");
-const S = LastCallScale;
-const PX = 16 / S; // px per unit on the floor (floor img scale = LastCallScale)
-const SPX = 32; // px per unit on prop sprites (obstacle img scale 0.5)
-
+const PX = LastCallFloorPixelsPerUnit;
+const SPX = 32;
 const C = {
-    night: "#100e17",
-    street: "#17151f",
-    sidewalk: "#24212e",
-    seam: "#2e2a3a",
-    wall: "#efe3cf",
-    wallShade: "#06050a",
-    pink: "#ff3d8b",
-    cyan: "#2de2e6",
-    yellow: "#ffd319",
-    purple: "#8b5cf6",
-    red: "#ff4d6d",
-    wood: "#5a3a22",
-    woodLight: "#7a5232",
+    street: "#242b2b",
+    sidewalk: "#53594f",
+    wall: "#bdb9a7",
+    edge: "#202825",
+    amber: "#d9b777",
+    yellow: "#c8ad66",
+    red: "#aa5144",
+    ink: "#212925",
+    paper: "#ccc2a4",
+    wood: "#786248",
+};
+const palette: Record<LastCallZoneId, [string, string]> = {
+    lobby: ["#555b4f", "#5c6154"],
+    storage: ["#424a43", "#474f47"],
+    courtyard: ["#343d3a", "#3c4440"],
+    diner: ["#625c4d", "#555448"],
+    alley: ["#303936", "#37403a"],
+    wing: ["#4b5148", "#50564b"],
+    club: ["#4e554a", "#535a4e"],
+    office: ["#635646", "#6b5d4b"],
+    garage: ["#424b46", "#49514b"],
+};
+const n = (v: number) => Math.round(v * 1000) / 1000;
+const esc = (s: string) => s.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
+const zone = (id: LastCallZoneId) => LastCallZones.find((z) => z.id === id)!.rect;
+const rect = (x: number, y: number, w: number, h: number, fill: string, attrs = "") =>
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${fill}" ${attrs}/>`;
+const rr = (r: LastCallRect, fill: string, attrs = "") => rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0, fill, attrs);
+const circle = (x: number, y: number, r: number, fill: string, attrs = "") =>
+    `<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="${fill}" ${attrs}/>`;
+const line = (x0: number, y0: number, x1: number, y1: number, color: string, width = .2, attrs = "") =>
+    `<path d="M${n(x0)} ${n(y0)}L${n(x1)} ${n(y1)}" fill="none" stroke="${color}" stroke-width="${width}" ${attrs}/>`;
+const text = (x: number, y: number, value: string, size: number, fill = C.paper, attrs = "") =>
+    `<text x="${n(x)}" y="${
+        n(y)
+    }" fill="${fill}" font-family="Arial,Helvetica,sans-serif" font-weight="bold" font-size="${size}" ${attrs}>${
+        esc(value)
+    }</text>`;
+const inset = (r: LastCallRect, by: number): LastCallRect => ({
+    x0: r.x0 + by,
+    y0: r.y0 + by,
+    x1: r.x1 - by,
+    y1: r.y1 - by,
+});
+const centered = (r: LastCallRect, w: number, h: number): LastCallRect => {
+    const x = (r.x0 + r.x1) / 2;
+    const y = (r.y0 + r.y1) / 2;
+    return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
 };
 
-/** Base-plan rect of a zone (for decor drawn inside the scale group). */
-const bzone = (id: LastCallZoneId) => LastCallBaseZones.find((z) => z.id === id)!.rect;
-const baseMotelRooms = LastCallMotelRooms.map((r) => ({ x0: r.x0 / S, y0: r.y0 / S, x1: r.x1 / S, y1: r.y1 / S }));
-const r2 = (n: number) => Math.round(n * 1000) / 1000;
-
-function rect(x: number, y: number, w: number, h: number, fill: string, extra = ""): string {
-    return `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="${fill}" ${extra}/>`;
-}
-function rr(r: LastCallRect, fill: string, extra = ""): string {
-    return rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0, fill, extra);
-}
-function text(x: number, y: number, s: string, size: number, fill: string, extra = ""): string {
-    return `<text x="${r2(x)}" y="${r2(y)}" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="${size}" fill="${fill}" ${extra}>${s}</text>`;
-}
-/** Props in game units (furniture keeps its size). */
-function propsOf(type: string): LastCallProp[] {
-    return LastCallProps.filter((p) => p.type === type);
-}
-/** Built-in fixtures in base-plan units, for drawing inside the scale group. */
-function basePropsOf(type: string): LastCallProp[] {
-    return LastCallBaseProps.filter((p) => p.type === type);
-}
-
-/** Checkerboard clipped to a rect. */
-function checker(r: LastCallRect, a: string, b: string, tile: number, id: string): string {
-    return `<pattern id="${id}" x="${r.x0}" y="${r.y0}" width="${tile * 2}" height="${tile * 2}" patternUnits="userSpaceOnUse">`
-        + rect(0, 0, tile * 2, tile * 2, a)
-        + rect(0, 0, tile, tile, b)
-        + rect(tile, tile, tile, tile, b)
-        + `</pattern>${rr(r, `url(#${id})`)}`;
-}
-
-function grid(r: LastCallRect, step: number, color: string, width: number): string {
+function grid(r: LastCallRect, step: number, color: string, width = .12): string {
     let s = "";
-    for (let x = r.x0 + step; x < r.x1 - 0.01; x += step) {
-        s += `<line x1="${r2(x)}" y1="${r.y0}" x2="${r2(x)}" y2="${r.y1}" stroke="${color}" stroke-width="${width}"/>`;
-    }
-    for (let y = r.y0 + step; y < r.y1 - 0.01; y += step) {
-        s += `<line x1="${r.x0}" y1="${r2(y)}" x2="${r.x1}" y2="${r2(y)}" stroke="${color}" stroke-width="${width}"/>`;
-    }
+    for (let x = r.x0 + step; x < r.x1; x += step) s += line(x, r.y0, x, r.y1, color, width);
+    for (let y = r.y0 + step; y < r.y1; y += step) s += line(r.x0, y, r.x1, y, color, width);
     return s;
 }
 
-function palm(cx: number, cy: number): string {
-    let s = `<circle cx="${cx}" cy="${cy}" r="1.6" fill="#4a2f1c" stroke="#2a1a10" stroke-width="0.25"/>`;
-    for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2 + 0.3;
-        const x = cx + Math.cos(a) * 2.9;
-        const y = cy + Math.sin(a) * 2.9;
-        s += `<path d="M${cx} ${cy} Q${r2(cx + Math.cos(a + 0.35) * 1.8)} ${r2(cy + Math.sin(a + 0.35) * 1.8)} ${r2(x)} ${r2(y)}" stroke="#2f9e63" stroke-width="0.9" fill="none" stroke-linecap="round"/>`;
-    }
-    return s + `<circle cx="${cx}" cy="${cy}" r="0.55" fill="#1d6b43"/>`;
+/** Flat road paint: decorative markings never add implied solid objects. */
+function arrow(x: number, y: number, rotation = 0): string {
+    return `<path d="M0 3V-3M-1.3 -1.5L0 -3L1.3 -1.5" transform="translate(${n(x)} ${
+        n(y)
+    }) rotate(${rotation})" fill="none" stroke="${C.paper}" stroke-width=".36" opacity=".38"/>`;
 }
 
 function floorSvg(): string {
     const A = LastCallApron;
     const W = LastCallWidth;
     const H = LastCallHeight;
-    const parts: string[] = [];
-    const defs: string[] = [];
-
-    // --- street + sidewalk around the block -------------------------------------
-    parts.push(rect(-A, -A, W + 2 * A, H + 2 * A, C.street));
-    parts.push(rect(-3.5, -3.5, W + 7, H + 7, C.sidewalk));
-    for (let x = -3; x < W + 3; x += 4) parts.push(rect(x, -3.5, 0.15, H + 7, C.seam));
-    // dashed center line of the street
-    const dash = `stroke="${C.yellow}" stroke-width="0.35" stroke-dasharray="3 3" opacity="0.55" fill="none"`;
-    parts.push(`<rect x="${-A / 2 - 1.75}" y="${-A / 2 - 1.75}" width="${W + A + 3.5}" height="${H + A + 3.5}" ${dash}/>`);
-
-    const under = parts.splice(0);
-    const room: string[] = [];
-
-    // --- zones (base-plan units, drawn inside scale(S)) --------------------------------------------------------------------
-    // Lobby: teal checker + entry rug
-    room.push(checker(bzone("lobby"), "#173a43", "#1f4a55", 2, "pLobby"));
-    room.push(rect(59, 100, 22, 9, "#3b1426", `opacity="0.85"`));
-    room.push(rect(59.6, 100.6, 20.8, 7.8, "none", `stroke="${C.pink}" stroke-width="0.25" opacity="0.7"`));
-    // reception desk (lastcall_reception)
-    for (const p of basePropsOf("lastcall_reception")) {
-        room.push(rect(p.pos.x - 4, p.pos.y - 1.25, 8, 2.5, C.wood, `stroke="${C.wall}" stroke-width="0.25"`));
-        room.push(rect(p.pos.x - 3.6, p.pos.y - 0.85, 2.2, 1.4, "#cfe9f2", `opacity="0.8"`));
-        room.push(`<circle cx="${p.pos.x + 2.5}" cy="${p.pos.y}" r="0.45" fill="${C.yellow}"/>`);
+    const defs = [
+        `<radialGradient id="lamp"><stop stop-color="${C.amber}" stop-opacity=".18"/><stop offset="1" stop-color="${C.amber}" stop-opacity="0"/></radialGradient>`,
+        `<pattern id="dinerTiles" width="6" height="6" patternUnits="userSpaceOnUse">${
+            rect(0, 0, 6, 6, palette.diner[0])
+        }${rect(0, 0, 3, 3, palette.diner[1])}${rect(3, 3, 3, 3, palette.diner[1])}</pattern>`,
+        `<pattern id="officeWood" width="2.8" height="12" patternUnits="userSpaceOnUse">${
+            rect(0, 0, 2.8, 12, palette.office[0])
+        }${line(.1, 0, .1, 12, palette.office[1])}${line(0, 7, 2.8, 7, "#574b3e", .1)}</pattern>`,
+    ];
+    const s = [rect(-A, -A, W + 2 * A, H + 2 * A, C.street)];
+    // The apron stays subtle. Curb slabs follow the actual irregular building footprint.
+    for (const z of LastCallZones) {
+        s.push(rr(inset(z.rect, -2.5), C.sidewalk));
+        s.push(rr(inset(z.rect, -1.5), "none", `stroke="#696e60" stroke-width=".24"`));
     }
-    room.push(text(57, 93.5, "LAST CALL MOTEL", 1.6, C.cyan, `opacity="0.75"`));
-
-    // Storage: concrete + pallets of boxes
-    room.push(rr(bzone("storage"), "#2a2d33"));
-    room.push(grid(bzone("storage"), 5, "#31353c", 0.12));
-    for (const p of propsOf("lastcall_pallet")) {
-        parts.push(rect(p.pos.x - 2.25, p.pos.y - 2.25, 4.5, 4.5, "#6b4a26", `stroke="#3a2812" stroke-width="0.3"`));
-        parts.push(rect(p.pos.x - 2, p.pos.y - 2, 2, 2, "#8a6236"));
-        parts.push(rect(p.pos.x + 0.1, p.pos.y + 0.1, 1.9, 1.9, "#7d5830"));
-        parts.push(`<line x1="${p.pos.x - 2.25}" y1="${p.pos.y}" x2="${p.pos.x + 2.25}" y2="${p.pos.y}" stroke="#3a2812" stroke-width="0.2"/>`);
+    s.push(line(-A + 2, H + 6.5, W + A - 2, H + 6.5, C.yellow, .25, `stroke-dasharray="4 5" opacity=".45"`));
+    for (const z of LastCallZones) {
+        const r = z.rect;
+        const [base, seam] = palette[z.id];
+        defs.push(`<clipPath id="zone-${z.id}">${rr(inset(r, .6), "white")}</clipPath>`);
+        s.push(rr(r, z.id === "diner" ? "url(#dinerTiles)" : z.id === "office" ? "url(#officeWood)" : base));
+        if (!["wing", "office", "diner"].includes(z.id)) s.push(grid(r, z.id === "lobby" ? 4 : 12, seam));
+        // Stable sparse wear. Low contrast and no noise filters: players remain easy to see.
+        let seed = z.id.split("").reduce((a, b) => a + b.charCodeAt(0), 17);
+        const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+        let marks = "";
+        for (let i = 0; i < 18; i++) {
+            const x = r.x0 + random() * (r.x1 - r.x0);
+            const y = r.y0 + random() * (r.y1 - r.y0);
+            marks += line(x, y, x + 1 + random() * 2, y + random() * .5, "#202923", .1, `opacity=".32"`);
+        }
+        s.push(`<g clip-path="url(#zone-${z.id})">${marks}</g>`);
     }
 
-    // Courtyard: pavers, drained pool, palms
-    room.push(rr(bzone("courtyard"), "#26232f"));
-    room.push(grid(bzone("courtyard"), 4, "#302c3b", 0.15));
-    for (const p of basePropsOf("lastcall_pool")) {
-        const x = p.pos.x - 14;
-        const y = p.pos.y - 7.5;
-        room.push(`<rect x="${x}" y="${y}" width="28" height="15" rx="4" fill="#e9a8c8"/>`);
-        defs.push(`<pattern id="pPool" x="${x}" y="${y}" width="2" height="2" patternUnits="userSpaceOnUse">${rect(0, 0, 2, 2, "#0f4f61")}${rect(0, 0, 2, 0.12, "#17687d")}${rect(0, 0, 0.12, 2, "#17687d")}</pattern>`);
-        room.push(`<rect x="${x + 0.9}" y="${y + 0.9}" width="26.2" height="13.2" rx="3.2" fill="url(#pPool)"/>`);
-        room.push(`<rect x="${x + 16}" y="${y + 0.9}" width="11.1" height="13.2" rx="3" fill="#0a3442" opacity="0.6"/>`);
-        room.push(text(x + 3, y + 8.6, "SHALLOW", 1.4, "#9fe7f5", `opacity="0.55"`));
-        room.push(text(x + 18.5, y + 8.6, "DEEP", 1.4, "#9fe7f5", `opacity="0.55"`));
-        // ladder
-        room.push(rect(x + 25, y + 5.5, 0.3, 4, "#c9d2d9"));
-        room.push(rect(x + 26.4, y + 5.5, 0.3, 4, "#c9d2d9"));
+    const lobby = zone("lobby");
+    const rug = centered(lobby, (lobby.x1 - lobby.x0) * .6, (lobby.y1 - lobby.y0) * .26);
+    s.push(rr(rug, "#6a5946"), rr(inset(rug, .55), "none", `stroke="#8e7a57" stroke-width=".18"`));
+    s.push(text(lobby.x0 + 3, lobby.y0 + 4, "RECEPTION", 1.35, C.paper, `letter-spacing=".25" opacity=".65"`));
+    s.push(
+        text(
+            (rug.x0 + rug.x1) / 2,
+            (rug.y0 + rug.y1) / 2 + .5,
+            "WELCOME",
+            1.2,
+            C.paper,
+            `text-anchor="middle" opacity=".45"`,
+        ),
+    );
+
+    const court = zone("courtyard");
+    // Side parking bays leave a continuous lane around the central sign island.
+    for (let y = court.y0 + 8; y < court.y1 - 6; y += 13) {
+        s.push(line(court.x0 + 3, y, court.x0 + 19, y, C.paper, .2, `opacity=".3"`));
+        s.push(line(court.x1 - 19, y, court.x1 - 3, y, C.paper, .2, `opacity=".3"`));
     }
-    for (const p of propsOf("lastcall_planter")) {
-        const z = LastCallZones.find((zz) => {
-            const r = zz.rect;
-            return p.pos.x > r.x0 && p.pos.x < r.x1 && p.pos.y > r.y0 && p.pos.y < r.y1;
-        });
-        if (z?.id === "courtyard") parts.push(palm(p.pos.x, p.pos.y));
-        else {
-            parts.push(`<circle cx="${p.pos.x}" cy="${p.pos.y}" r="1.5" fill="#4a2f1c"/>`);
-            parts.push(`<circle cx="${p.pos.x}" cy="${p.pos.y}" r="1.15" fill="#2f9e63"/>`);
+    s.push(arrow((court.x0 + court.x1) / 2, court.y0 + 8, 90));
+    s.push(arrow((court.x0 + court.x1) / 2, court.y1 - 8, -90));
+
+    const diner = zone("diner");
+    s.push(rect(diner.x0 + 1, diner.y0 + 1, (diner.x1 - diner.x0) * .43, 9, "#777866"));
+    s.push(
+        text(
+            diner.x1 - 4,
+            diner.y1 - 3,
+            "NIGHT OWL DINER",
+            1.65,
+            C.amber,
+            `text-anchor="end" letter-spacing=".1" opacity=".8"`,
+        ),
+    );
+    const storage = zone("storage");
+    s.push(text(storage.x0 + 2, storage.y0 + 3, "LINEN / STOCK", 1, C.paper, `opacity=".45"`));
+    const alley = zone("alley");
+    s.push(line(alley.x0 + 1.7, alley.y0 + 2, alley.x0 + 1.7, alley.y1 - 2, C.yellow, .18, `opacity=".35"`));
+    s.push(text(alley.x0 + 3, alley.y1 - 4, "KEEP CLEAR", .95, C.paper, `opacity=".45"`));
+    for (const r of LastCallMotelRooms) {
+        const i = LastCallMotelRooms.indexOf(r);
+        s.push(rr(inset(r, .65), "#575448"));
+        s.push(rr(inset(r, 2), "none", `stroke="#676250" stroke-width=".18"`));
+        s.push(rect(r.x0 + 1, r.y1 - 6, 5, 5, "#696d5d"));
+        s.push(text(r.x1 - 2.2, r.y1 - 2.2, `${101 + i}`, 1.4, C.paper, `text-anchor="end" opacity=".65"`));
+    }
+    const wing = zone("wing");
+    const hallX = LastCallMotelRooms[0]?.x1 ?? wing.x0;
+    s.push(line(hallX + 2.5, wing.y0 + 1, hallX + 2.5, wing.y1 - 1, "#727662", .3, `opacity=".5"`));
+    s.push(text(hallX + 4, wing.y0 + 4, "GUEST ROOMS", 1.1, C.paper, `opacity=".6"`));
+
+    const service = zone("club");
+    for (const [i, r] of LastCallInteriorRooms.slice(LastCallMotelRooms.length).entries()) {
+        s.push(rr(inset(r, .6), i === 0 ? "#535747" : "#656b5a"));
+        if (i !== 0) s.push(grid(inset(r, .6), 3, "#717563"));
+        s.push(text(r.x0 + 2, r.y1 - 2.5, i === 0 ? "PARTS STORE" : "LAUNDRY", 1, C.paper, `opacity=".55"`));
+    }
+    s.push(text(service.x0 + 4, service.y1 - 4, "MAINTENANCE", 1.6, C.paper, `letter-spacing=".15" opacity=".55"`));
+    s.push(text(service.x0 + 4, service.y1 - 2.4, "EMPLOYEES ONLY", .72, C.amber, `letter-spacing=".1" opacity=".5"`));
+    const office = zone("office");
+    s.push(text(office.x0 + 2.5, office.y1 - 3, "MANAGER", 1.2, C.paper, `opacity=".5"`));
+    const garage = zone("garage");
+    for (let y = garage.y0 + 9; y < garage.y1 - 6; y += 14) {
+        s.push(line(garage.x1 - 13, y, garage.x1 - 1, y, C.paper, .24, `opacity=".32"`));
+    }
+    for (let y = garage.y0 + 13; y < garage.y1 - 6; y += 30) s.push(arrow(garage.x0 + 10, y));
+    s.push(text(garage.x0 + 3, garage.y1 - 4, "SERVICE GARAGE", 1.35, C.paper, `opacity=".55"`));
+
+    // Subtle, flat evidence of abandonment, placed relative to the authored props.
+    for (const p of LastCallProps) {
+        if (p.type === "zombie_garage_car") {
+            s.push(
+                `<ellipse cx="${n(p.pos.x + 1.2)}" cy="${
+                    n(p.pos.y + 5.5)
+                }" rx="2.3" ry="1.2" fill="#202b27" opacity=".65"/>`,
+            );
+            s.push(line(p.pos.x - 2.3, p.pos.y + 6, p.pos.x - 2.3, p.pos.y + 10, "#202b27", .35, `opacity=".4"`));
+        }
+        if (p.type === "lastcall_pallet" || p.type.includes("luggage")) {
+            s.push(
+                rect(
+                    p.pos.x + 3.4,
+                    p.pos.y + 1.2,
+                    .9,
+                    .6,
+                    C.paper,
+                    `opacity=".45" transform="rotate(18 ${n(p.pos.x + 3.4)} ${n(p.pos.y + 1.2)})"`,
+                ),
+            );
         }
     }
-    room.push(text(41.5, 89, "COURTYARD", 1.6, C.wall, `opacity="0.25"`));
+    for (const [i, e] of LastCallEntries.entries()) {
+        if (i % 4 !== 0) continue;
+        s.push(
+            `<path d="M${n(e.pos.x)} ${
+                n(e.pos.y)
+            }l1 1.6 -.5 1.1 1 2.2" stroke="#6e4035" stroke-width=".5" stroke-linecap="round" fill="none" opacity=".65"/>`,
+        );
+    }
 
-    // Diner: red checker, kitchen tiles, counter, booths
-    room.push(checker(bzone("diner"), "#24121a", "#3d1a26", 2, "pDiner"));
-    room.push(rect(10.5, 90.5, 15.5, 7.5, "#34383f"));
-    room.push(grid({ x0: 10.5, y0: 90.5, x1: 26, y1: 98 }, 1.5, "#3d424a", 0.1));
-    for (const p of basePropsOf("lastcall_counter_diner")) {
-        room.push(rect(p.pos.x - 7, p.pos.y - 1, 14, 2, "#c23a5e", `stroke="#e7e7ee" stroke-width="0.3"`));
-        for (let i = 0; i < 5; i++) {
-            room.push(`<circle cx="${p.pos.x - 5.5 + i * 2.75}" cy="${p.pos.y + 2.2}" r="0.7" fill="#e7e7ee" stroke="#c23a5e" stroke-width="0.2"/>`);
+    // Only paint solid fixtures when their shared obstacle definition has collision.
+    for (const p of LastCallProps) {
+        const def = LastCallMapObjectDefs[p.type];
+        if (!def || def.type !== "obstacle" || def.img.sprite || !def.collision || def.collision.type !== 1) continue;
+        const col = def.collision;
+        const x = col.min.x;
+        const y = -col.max.y;
+        const w = col.max.x - col.min.x;
+        const h = col.max.y - col.min.y;
+        let body = rect(x + .22, y + .28, w, h, C.ink, `opacity=".6"`)
+            + rect(x, y, w, h, C.wood, `stroke="${C.edge}" stroke-width=".24"`)
+            + rect(x + .2, y + .2, w - .4, h - .4, "none", `stroke="#9a8460" stroke-width=".16"`);
+        if (p.type.includes("sign")) {
+            body = rect(x, y, w, h, "#777d66", `stroke="${C.edge}" stroke-width=".3"`)
+                + rect(x + .4, y + .4, w - .8, h - .8, "#454e3a")
+                + rect(x + 1.2, y + 1.2, w - 2.4, h - 2.4, "#2d3831", `rx=".4" stroke="${C.amber}" stroke-width=".16"`)
+                + text(
+                    0,
+                    -.3,
+                    "AFTER HOURS",
+                    Math.min(2.5, w / 8.7),
+                    C.amber,
+                    `text-anchor="middle" font-style="italic" letter-spacing=".16"`,
+                )
+                + text(0, 1.9, "M O T E L", 1.1, C.paper, `text-anchor="middle"`)
+                + circle(x + 1, y + h / 2, .5, "#727956") + circle(x + w - 1, y + h / 2, .5, "#727956");
+        } else if (p.type === "lastcall_planter") {
+            body = rect(x, y, w, h, "#777866", `stroke="${C.edge}" stroke-width=".2"`)
+                + circle(0, 0, Math.min(w, h) * .4, "#495c3b")
+                + circle(-.35, -.35, Math.min(w, h) * .2, "#63724a");
+        } else if (p.type === "lastcall_pallet") {
+            body = rect(x, y, w, h, "#6a5941", `stroke="${C.edge}" stroke-width=".25"`);
+            for (let a = x + .5; a < x + w - .1; a += .8) body += line(a, y + .15, a, y + h - .15, "#9a8057", .4);
+            body += rect(x + .5, y + .5, w * .55, h * .6, "#947b51", `stroke="#4b4534" stroke-width=".2"`)
+                + line(x + .7, y + h * .45, x + w * .6, y + h * .45, "#b69d6e", .3);
+        } else if (p.type.includes("laundry")) {
+            body = rect(x, y, w, h, "#aaa995", `stroke="${C.edge}" stroke-width=".22"`)
+                + circle(0, .1, w * .32, "#434f46", `stroke="#808775" stroke-width=".15"`)
+                + circle(0, .1, w * .2, "#6c7a69")
+                + rect(x + .3, y + .2, w - .6, .3, "#697463");
+        } else if (p.type.includes("parts_rack")) {
+            body = rect(x, y, w, h, "#5d6758", `stroke="${C.edge}" stroke-width=".24"`);
+            for (let shelfY = y + .4; shelfY < y + h - .5; shelfY += 3.2) {
+                body += rect(x + .3, shelfY, w - .6, 2.7, "#958165", `stroke="#3b4539" stroke-width=".15"`);
+                body += line(x + w * .45, shelfY, x + w * .45, shelfY + 2.7, "#675c45", .15);
+            }
+        } else if (p.type.includes("ice_machine")) {
+            body = rect(x, y, w, h, "#a3a697", `stroke="${C.edge}" stroke-width=".2"`)
+                + rect(x + .3, y + .3, w - .6, h - .6, "#5e746e")
+                + text(0, .4, "ICE", .8, C.paper, `text-anchor="middle"`);
+        } else if (p.type.includes("luggage")) {
+            body = rect(x, y, w, h, "#8a6548", `rx=".2" stroke="${C.edge}" stroke-width=".2"`)
+                + line(-w * .2, y, -w * .2, y + h, "#bba781", .15)
+                + line(w * .2, y, w * .2, y + h, "#bba781", .15);
+        } else {
+            body += line(x + .3, y + h * .67, x + w - .3, y + h * .67, "#504735", .12);
+            body += rect(x + .6, y + .4, Math.min(1.8, w * .25), Math.min(.9, h * .4), C.paper, `opacity=".7"`);
         }
+        s.push(
+            `<g data-fixture="${p.type}" transform="translate(${n(p.pos.x)} ${n(p.pos.y)}) rotate(${
+                -90 * (p.ori ?? 0)
+            })">${body}</g>`,
+        );
     }
-    for (const p of propsOf("table_01")) {
-        parts.push(rect(p.pos.x - 3.4, p.pos.y - 4, 6.8, 1.4, "#8a1f3a", `rx="0.5"`));
-        parts.push(rect(p.pos.x - 3.4, p.pos.y + 2.2, 6.8, 1.4, "#8a1f3a", `rx="0.5"`));
-    }
-    room.push(text(35, 113.6, "NEON DINER", 1.8, C.pink, `opacity="0.7"`));
 
-    // Alley: asphalt, puddles, edge stripes
-    room.push(rr(bzone("alley"), "#18171d"));
-    room.push(`<ellipse cx="106" cy="88" rx="2.6" ry="1.4" fill="#22304a" opacity="0.8"/>`);
-    room.push(`<ellipse cx="103.5" cy="55" rx="1.8" ry="1" fill="#22304a" opacity="0.8"/>`);
-    room.push(`<path d="M101 70 L104 73 L103 76 L106 80" stroke="#0e0d12" stroke-width="0.25" fill="none"/>`);
-    room.push(rect(100.6, 50.5, 0.35, 64, C.yellow, `opacity="0.35"`));
-    room.push(rect(114.05, 50.5, 0.35, 64, C.yellow, `opacity="0.35"`));
-    room.push(text(101.2, 108, "ALLEY", 1.5, C.wall, `opacity="0.3"`));
-
-    // Motel wing: hall carpet, room carpets, ice machines, room numbers
-    defs.push(`<pattern id="pCarpet" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse">${rect(0, 0, 3, 3, "#33224a")}<path d="M1.5 0 L3 1.5 L1.5 3 L0 1.5 Z" fill="#3d2a57"/></pattern>`);
-    room.push(rr(bzone("wing"), "url(#pCarpet)"));
-    baseMotelRooms.forEach((r, i) => {
-        room.push(rr(r, "#2a1f35"));
-        room.push(rect(r.x0 + 1.5, r.y0 + 1.5, r.x1 - r.x0 - 3, r.y1 - r.y0 - 3, "none", `stroke="#3a2b4a" stroke-width="0.3"`));
-        room.push(text(r.x1 - 5, r.y1 - 1.5, `10${i + 1}`, 1.3, "#bfb3d6", `opacity="0.7"`));
-        // bathroom tiles in the corner
-        room.push(rect(r.x0 + 0.5, r.y1 - 5, 4.5, 4.5, "#3a3f47"));
-    });
-    for (const p of propsOf("lastcall_ice_machine")) {
-        parts.push(rect(p.pos.x - 1.5, p.pos.y - 1.25, 3, 2.5, "#cfe9f2", `stroke="#7fb3c4" stroke-width="0.25"`));
-        parts.push(text(p.pos.x - 1.1, p.pos.y + 0.45, "ICE", 0.9, "#2a6f86"));
-    }
-    room.push(text(24, 46, "MOTEL WING", 1.5, C.wall, `opacity="0.3"`));
-
-    // Club Paradiso
-    room.push(rr(bzone("club"), "#1a0f24"));
-    defs.push(`<pattern id="pDance" x="58" y="12" width="8" height="8" patternUnits="userSpaceOnUse">`
-        + rect(0, 0, 4, 4, "#7a1f5e") + rect(4, 0, 4, 4, "#1f5a6e") + rect(0, 4, 4, 4, "#3a2a78") + rect(4, 4, 4, 4, "#7a1f5e")
-        + rect(0, 0, 8, 8, "none", `stroke="#0c0812" stroke-width="0.3"`) + `</pattern>`);
-    room.push(rect(58, 12, 32, 24, "url(#pDance)"));
-    room.push(rect(58, 12, 32, 24, "none", `stroke="${C.pink}" stroke-width="0.4"`));
-    for (const p of basePropsOf("lastcall_dj_booth")) {
-        room.push(rect(p.pos.x - 8, p.pos.y - 2, 16, 4, "#241a33", `stroke="${C.pink}" stroke-width="0.35"`));
-        room.push(`<circle cx="${p.pos.x - 4}" cy="${p.pos.y}" r="1.3" fill="#0c0812" stroke="${C.cyan}" stroke-width="0.25"/>`);
-        room.push(`<circle cx="${p.pos.x + 4}" cy="${p.pos.y}" r="1.3" fill="#0c0812" stroke="${C.cyan}" stroke-width="0.25"/>`);
-        room.push(rect(p.pos.x - 1.5, p.pos.y - 0.8, 3, 1.6, "#3a2a50"));
-    }
-    for (const p of basePropsOf("lastcall_bar_club")) {
-        room.push(rect(40.5, p.pos.y - 15, 2.4, 30, "#2a1a30"));
-        for (let y = p.pos.y - 14; y < p.pos.y + 14; y += 1.6) {
-            const col = [C.cyan, C.pink, C.yellow, "#9be36b"][Math.floor(y) % 4];
-            room.push(`<circle cx="41.7" cy="${r2(y)}" r="0.35" fill="${col}" opacity="0.8"/>`);
-        }
-        room.push(rect(p.pos.x - 1.5, p.pos.y - 15, 3, 30, C.wood, `stroke="${C.woodLight}" stroke-width="0.3"`));
-    }
-    room.push(rect(96, 29, 13.5, 20.5, "#3b1530", `opacity="0.9"`));
-    room.push(rect(96, 29, 13.5, 20.5, "none", `stroke="${C.pink}" stroke-width="0.3" stroke-dasharray="1 0.6"`));
-    room.push(text(97, 28, "VIP", 1.4, C.pink));
-    room.push(text(61, 40.5, "CLUB PARADISO", 2.6, C.pink, `opacity="0.85"`));
-
-    // Manager's office: wood planks, rug, desk, safe
-    defs.push(`<pattern id="pWood" x="0" y="0" width="1.2" height="6" patternUnits="userSpaceOnUse">${rect(0, 0, 1.2, 6, "#3a2618")}${rect(1.1, 0, 0.1, 6, "#2a1b10")}${rect(0, 2.9, 1.2, 0.1, "#2a1b10")}</pattern>`);
-    room.push(rr(bzone("office"), "url(#pWood)"));
-    room.push(rect(117, 4, 22, 14, "#4a1d2c"));
-    room.push(rect(117.6, 4.6, 20.8, 12.8, "none", `stroke="#c9a25a" stroke-width="0.25"`));
-    for (const p of basePropsOf("lastcall_office_table")) {
-        room.push(rect(p.pos.x - 6, p.pos.y - 1.75, 12, 3.5, "#6b3a1f", `stroke="#c9a25a" stroke-width="0.25"`));
-        room.push(rect(p.pos.x - 4.5, p.pos.y - 1.1, 2.6, 2, "#efe3cf", `opacity="0.85"`));
-        room.push(`<circle cx="${p.pos.x + 3.5}" cy="${p.pos.y}" r="0.7" fill="#1b1b22"/>`);
-    }
-    room.push(rect(140.5, 1, 4, 3.5, "#3a3d45", `stroke="#6e727c" stroke-width="0.25"`));
-    // freight ramp under the gate
-    room.push(rect(127, 20, 6, 5, "#2a2a31"));
-    for (let y = 20.5; y < 25; y += 1) room.push(rect(127.3, y, 5.4, 0.2, "#3c3c45"));
-    room.push(text(111.5, 24, "OFFICE", 1.3, C.wall, `opacity="0.35"`));
-    // glow under the power switch so it reads from across the room
-    parts.push(`<circle cx="${LastCallPowerSwitchPos.x}" cy="${LastCallPowerSwitchPos.y}" r="2.6" fill="${C.yellow}" opacity="0.14"/>`);
-    parts.push(text(LastCallPowerSwitchPos.x - 2.3, LastCallPowerSwitchPos.y - 1.6, "POWER", 0.9, C.yellow, `opacity="0.8"`));
-
-    // Garage: concrete, parking stalls, arrows, oil
-    room.push(rr(bzone("garage"), "#1c1c22"));
-    room.push(grid(bzone("garage"), 10, "#23232a", 0.15));
-    for (let y = 30; y <= 110; y += 9) room.push(rect(135.5, y, 9, 0.3, C.yellow, `opacity="0.55"`));
-    for (let y = 26; y < 112; y += 18) {
-        room.push(`<path d="M122 ${y + 4} l1.5 -2.5 l1.5 2.5 m-1.5 -2.5 v6" stroke="#e7e7ee" stroke-width="0.35" fill="none" opacity="0.35"/>`);
-    }
-    for (const [x, y] of [[133, 50], [120, 92], [137, 72]]) {
-        room.push(`<ellipse cx="${x}" cy="${y}" rx="1.8" ry="1.1" fill="#0b0b0f" opacity="0.7"/>`);
-    }
-    room.push(text(116, 113.5, "P2  PARKING", 1.4, C.wall, `opacity="0.3"`));
-
-    // --- mystery box spots, manholes, spawn chevrons ------------------------------
     for (const b of LastCallBoxSpots) {
-        // zombie_mystery_box is 8.8 × 3.7
-        parts.push(`<rect x="${b.pos.x - 4.9}" y="${b.pos.y - 2.35}" width="9.8" height="4.7" rx="0.6" fill="#8b5cf6" fill-opacity="0.12" stroke="${C.purple}" stroke-width="0.25" stroke-dasharray="0.8 0.5"/>`);
+        s.push(
+            rect(
+                b.pos.x - 4.9,
+                b.pos.y - 2.35,
+                9.8,
+                4.7,
+                "none",
+                `rx=".35" stroke="#a28d5e" stroke-width=".2" stroke-dasharray="1 .65" opacity=".5"`,
+            ),
+        );
     }
     for (const e of LastCallEntries) {
-        if (e.manhole) {
-            parts.push(`<circle cx="${e.pos.x}" cy="${e.pos.y}" r="2.1" fill="${C.red}" opacity="0.15"/>`);
-            parts.push(`<circle cx="${e.pos.x}" cy="${e.pos.y}" r="1.5" fill="#2b2b33" stroke="#5a5a66" stroke-width="0.3"/>`);
-            for (let i = -1; i <= 1; i++) parts.push(rect(e.pos.x - 1, e.pos.y + i * 0.5 - 0.08, 2, 0.16, "#45454f"));
+        if (!e.manhole) continue;
+        s.push(circle(e.pos.x, e.pos.y, 1.5, "#29342f", `stroke="#7e8675" stroke-width=".22"`));
+        for (let k = -1; k <= 1; k++) {
+            s.push(line(e.pos.x - .9, e.pos.y + k * .5, e.pos.x + .9, e.pos.y + k * .5, "#596456", .16));
         }
     }
-
-    // --- thresholds under every doorway (visible once a shutter is bought) -------
     for (const d of LastCallDoors) {
         const o = d.opening;
-        const t = LastCallWallThickness;
-        const r: LastCallRect = o.axis === "h"
-            ? { x0: o.a0, y0: o.at - t / 2, x1: o.a1, y1: o.at + t / 2 }
-            : { x0: o.at - t / 2, y0: o.a0, x1: o.at + t / 2, y1: o.a1 };
-        parts.push(rr(r, "#3a3a44"));
+        const mid = (o.a0 + o.a1) / 2;
+        const len = o.a1 - o.a0;
+        const x = o.axis === "h" ? mid : o.at;
+        const y = o.axis === "h" ? o.at : mid;
+        let body = rect(-len / 2, -.5, len, 1, "#747465");
         if (d.kind === "shutter" || d.kind === "power") {
-            // hazard paint on both sides of a shutter
-            const col = d.kind === "power" ? C.pink : C.yellow;
-            const sides: LastCallRect[] = o.axis === "h"
-                ? [{ x0: o.a0, y0: o.at - 1.6, x1: o.a1, y1: o.at - 1.0 }, { x0: o.a0, y0: o.at + 1.0, x1: o.a1, y1: o.at + 1.6 }]
-                : [{ x0: o.at - 1.6, y0: o.a0, x1: o.at - 1.0, y1: o.a1 }, { x0: o.at + 1.0, y0: o.a0, x1: o.at + 1.6, y1: o.a1 }];
-            for (const s of sides) parts.push(rr(s, col, `opacity="0.55"`));
-            if (d.cost) {
-                const mid = (o.a0 + o.a1) / 2;
-                const [tx, ty] = o.axis === "h" ? [mid - 1.6, o.at - 2.3] : [o.at + 2.1, mid + 0.5];
-                parts.push(text(tx, ty, `$${d.cost}`, 1.25, C.yellow, `opacity="0.9"`));
-            }
+            const color = d.kind === "power" ? C.red : C.yellow;
+            body += rect(-len / 2, -1.4, len, .4, color, `opacity=".7"`)
+                + rect(-len / 2, 1, len, .4, color, `opacity=".7"`);
+            body += text(0, -2.2, d.cost ? `$${d.cost}` : "POWER", 1, color, `text-anchor="middle"`);
         }
+        s.push(
+            `<g data-door="${d.id}" transform="translate(${n(x)} ${n(y)}) rotate(${
+                o.axis === "h" ? 0 : -90
+            })">${body}</g>`,
+        );
+        if (d.kind !== "room") s.push(circle(x, y, 7, "url(#lamp)"));
     }
-
-    // --- walls ---------------------------------------------------------------------
-    const walls = lastCallWalls();
     const half = LastCallWallThickness / 2;
-    const wallRects = walls.map((w): LastCallRect =>
-        w.axis === "h"
+    for (const w of lastCallWalls()) {
+        const r = w.axis === "h"
             ? { x0: w.a0, y0: w.at - half, x1: w.a1, y1: w.at + half }
-            : { x0: w.at - half, y0: w.a0, x1: w.at + half, y1: w.a1 }
-    );
-    for (const r of wallRects) parts.push(rect(r.x0 + 0.35, r.y0 + 0.35, r.x1 - r.x0, r.y1 - r.y0, C.wallShade, `opacity="0.55"`));
-    for (const r of wallRects) parts.push(rr(r, C.wall));
-    for (const r of wallRects) {
-        parts.push(rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0, "none", `stroke="#b8a98f" stroke-width="0.12"`));
+            : { x0: w.at - half, y0: w.a0, x1: w.at + half, y1: w.a1 };
+        s.push(rect(r.x0 + .4, r.y0 + .5, r.x1 - r.x0, r.y1 - r.y0, C.ink, `opacity=".5"`));
+        s.push(rr(r, C.wall, `stroke="${C.edge}" stroke-width=".1"`));
+        s.push(rr(inset(r, .12), "none", `stroke="#dbd2b7" stroke-width=".1"`));
     }
-
-    // --- boarded windows (where enemies climb in) ------------------------------------
     for (const e of LastCallEntries) {
         if (!e.window) continue;
         const o = e.window;
+        const mid = (o.a0 + o.a1) / 2;
         const len = o.a1 - o.a0;
-        const glass: LastCallRect = o.axis === "h"
-            ? { x0: o.a0, y0: o.at - 0.3, x1: o.a1, y1: o.at + 0.3 }
-            : { x0: o.at - 0.3, y0: o.a0, x1: o.at + 0.3, y1: o.a1 };
-        parts.push(rr(glass, C.cyan, `opacity="0.85"`));
-        const planks = Math.max(2, Math.round(len / 2));
-        for (let i = 0; i < planks; i++) {
-            const t = (i + 0.5) / planks;
-            const c = o.a0 + len * t;
-            const tilt = i % 2 ? 0.35 : -0.35;
-            const [x1, y1, x2, y2] = o.axis === "h"
-                ? [c - 0.6, o.at - 0.7 + tilt, c + 0.6, o.at + 0.7 - tilt]
-                : [o.at - 0.7 + tilt, c - 0.6, o.at + 0.7 - tilt, c + 0.6];
-            parts.push(`<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}" stroke="#8a5a2b" stroke-width="0.55" stroke-linecap="round"/>`);
+        let body = rect(-len / 2, -.36, len, .72, "#283f38", `stroke="#9a9b80" stroke-width=".12"`);
+        for (let i = 0; i < Math.ceil(len / 1.5); i++) {
+            const a = -len / 2 + .5 + i * 1.4;
+            body += line(a - .3, -.65, a + .3, .65, "#8e7350", .45, `stroke-linecap="square"`);
         }
-        // red danger chevron on the floor inside
-        parts.push(`<circle cx="${e.pos.x}" cy="${e.pos.y}" r="1.3" fill="${C.red}" opacity="0.18"/>`);
+        s.push(
+            `<g data-window="${e.zone}" transform="translate(${n(o.axis === "h" ? mid : o.at)} ${
+                n(o.axis === "h" ? o.at : mid)
+            }) rotate(${o.axis === "h" ? 0 : -90})">${body}</g>`,
+        );
+        s.push(circle(e.pos.x, e.pos.y, 5, "url(#lamp)", `opacity=".45"`));
     }
-
-    const w = Math.round((W + 2 * A) * PX);
-    const h = Math.round((H + 2 * A) * PX);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${-A} ${-A} ${W + 2 * A} ${H + 2 * A}">`
-        + `<defs>${defs.join("")}</defs>${under.join("")}`
-        + `<g transform="scale(${S})">${room.join("")}</g>${parts.join("")}</svg>\n`;
+    s.push(circle(LastCallPowerSwitchPos.x, LastCallPowerSwitchPos.y, 4, "url(#lamp)"));
+    s.push(text(LastCallPowerSwitchPos.x - 2.2, LastCallPowerSwitchPos.y - 2, "POWER", .9, C.amber));
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round((W + 2 * A) * PX)}" height="${
+        Math.round((H + 2 * A) * PX)
+    }" viewBox="${-A} ${-A} ${W + 2 * A} ${H + 2 * A}"><defs>${defs.join("")}</defs>${s.join("")}</svg>\n`;
 }
 
-/** A prop sprite drawn in units, w×h units at 32 px/unit. */
-function sprite(wu: number, hu: number, body: string): string {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${wu * SPX}" height="${hu * SPX}" viewBox="0 0 ${wu} ${hu}">${body}</svg>\n`;
+function sprite(w: number, h: number, body: string): string {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * SPX}" height="${
+        h * SPX
+    }" viewBox="0 0 ${w} ${h}">${body}</svg>\n`;
 }
-
-function hazard(wu: number, hu: number, a: string, b: string, id: string): string {
-    return `<defs><pattern id="${id}" width="1.2" height="1.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">${rect(0, 0, 0.6, 1.2, a)}${rect(0.6, 0, 0.6, 1.2, b)}</pattern></defs>`
-        + rect(0, 0, wu, hu, `url(#${id})`)
-        + rect(0.06, 0.06, wu - 0.12, hu - 0.12, "none", `stroke="#111" stroke-width="0.12"`);
+function shutter(power: boolean): string {
+    const color = power ? C.red : C.yellow;
+    let body = rect(.03, .03, 5.94, 1.14, "#46504a", `stroke="${C.edge}" stroke-width=".06"`);
+    for (let x = .12; x < 6; x += .33) body += line(x, .12, x, 1.08, "#778071", .08);
+    body += rect(.1, .12, .45, .96, color) + rect(5.45, .12, .45, .96, color);
+    body += rect(2.5, .12, 1, .96, "#25312b", `rx=".08"`);
+    body += power
+        ? `<path d="M3.12 .21L2.73 .66H3.03L2.88 1L3.29 .5H3.03Z" fill="${color}"/>`
+        : `<path d="M2.8 .61V.42a.2 .2 0 0 1 .4 0v.19" fill="none" stroke="${color}" stroke-width=".1"/>${
+            rect(2.7, .57, .6, .37, color, `rx=".05"`)
+        }`;
+    return sprite(6, 1.2, body);
 }
-
 const sprites: Record<string, string> = {
     "map-lastcall-floor.svg": floorSvg(),
-    // rolling shutter, 6 × 1.2
-    "map-lastcall-shutter.svg": sprite(
-        6,
-        1.2,
-        hazard(6, 1.2, C.yellow, "#1a1a1f", "h")
-            + rect(2.35, 0.14, 1.3, 0.92, "#1a1a1f", `rx="0.15"`)
-            // padlock: shackle + body
-            + `<path d="M2.8 0.62 v-0.18 a0.2 0.2 0 0 1 0.4 0 v0.18" stroke="${C.yellow}" stroke-width="0.1" fill="none"/>`
-            + rect(2.7, 0.6, 0.6, 0.38, C.yellow, `rx="0.06"`)
-            + `<circle cx="3" cy="0.77" r="0.06" fill="#1a1a1f"/>`,
-    ),
-    // freight gate, 6 × 1.2
-    "map-lastcall-gate.svg": sprite(
-        6,
-        1.2,
-        hazard(6, 1.2, C.pink, "#1a1a1f", "g")
-            + rect(2.4, 0.18, 1.2, 0.84, "#1a1a1f", `rx="0.15"`)
-            + `<path d="M3.1 0.28 L2.75 0.62 H3.05 L2.9 0.95 L3.3 0.55 H3 Z" fill="${C.yellow}"/>`,
-    ),
-    // garage pillar, 2.5 × 2.5
+    "map-lastcall-shutter.svg": shutter(false),
+    "map-lastcall-gate.svg": shutter(true),
     "map-lastcall-pillar.svg": sprite(
         2.5,
         2.5,
-        rect(0, 0, 2.5, 2.5, "#6e6e7c") + rect(0.15, 0.15, 2.2, 2.2, "#8a8a98")
-            + `<defs><pattern id="ph" width="0.5" height="0.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">${rect(0, 0, 0.25, 0.5, C.yellow)}${rect(0.25, 0, 0.25, 0.5, "#1a1a1f")}</pattern></defs>`
-            + rect(0, 0, 2.5, 0.35, "url(#ph)") + rect(0, 2.15, 2.5, 0.35, "url(#ph)"),
+        rect(.04, .04, 2.42, 2.42, "#8b8f7a", `stroke="${C.edge}" stroke-width=".08"`)
+            + rect(.25, .25, 2, 2, "#a5a68d") + rect(.04, 1.9, 2.42, .5, C.yellow)
+            + line(.25, 2.35, .65, 1.9, C.ink, .2) + line(1.05, 2.35, 1.45, 1.9, C.ink, .2)
+            + line(1.85, 2.35, 2.25, 1.9, C.ink, .2),
     ),
-    // parked car (top-down), 5 × 8.5
     "map-lastcall-car.svg": sprite(
         5,
         8.5,
-        `<rect x="0.2" y="0.2" width="4.6" height="8.1" rx="1.3" fill="#1d8a8f" stroke="#0b3c3f" stroke-width="0.2"/>`
-            + `<rect x="0.75" y="2.1" width="3.5" height="1.7" rx="0.4" fill="#0c1a24"/>`
-            + `<rect x="0.75" y="5.6" width="3.5" height="1.3" rx="0.4" fill="#0c1a24"/>`
-            + `<rect x="0.9" y="3.9" width="3.2" height="1.6" fill="#24a3a8"/>`
-            + `<rect x="0.6" y="0.35" width="1" height="0.35" fill="#fff6c2"/><rect x="3.4" y="0.35" width="1" height="0.35" fill="#fff6c2"/>`
-            + `<rect x="0.6" y="7.8" width="1" height="0.3" fill="${C.red}"/><rect x="3.4" y="7.8" width="1" height="0.3" fill="${C.red}"/>`
-            + `<line x1="2.5" y1="0.4" x2="2.5" y2="2" stroke="${C.pink}" stroke-width="0.25"/>`,
+        rect(.13, .14, 4.74, 8.22, "#737c69", `rx="1" stroke="#202b25" stroke-width=".2"`)
+            + rect(.5, .45, 4, 1.5, "#87917a", `rx=".35"`) + rect(.7, 2.15, 3.6, 1.6, "#263a35", `rx=".3"`)
+            + rect(.75, 3.95, 3.5, 1.7, "#8c947d", `rx=".15"`) + rect(.7, 5.9, 3.6, 1.1, "#263a35", `rx=".25"`)
+            + rect(.7, .22, .9, .3, "#d1c095") + rect(3.4, .22, .9, .3, "#bbaa87")
+            + rect(.7, 7.95, .8, .26, C.red) + rect(3.5, 7.95, .8, .26, "#5f3930")
+            + `<path d="M3.1 2.2L2.5 2.8L3.4 3.6M2.5 2.8L1.5 2.45" fill="none" stroke="#8e9c89" stroke-width=".08"/>`
+            + `<path d="M.55 6.1l.3 .3 -.2 .6M4.5 1l-.35 .3 .2 .7" fill="none" stroke="#a18b62" stroke-width=".2"/>`
+            + line(.25, 4.1, .5, 4.1, C.ink, .16) + line(4.5, 4.1, 4.75, 4.1, C.ink, .16),
     ),
-    // dumpster, 5.5 × 3
     "map-lastcall-dumpster.svg": sprite(
         5.5,
         3,
-        `<rect x="0.1" y="0.1" width="5.3" height="2.8" rx="0.25" fill="#2f5d3a" stroke="#1b3522" stroke-width="0.2"/>`
-            + `<rect x="0.4" y="0.4" width="2.3" height="2.2" fill="#3a7048"/><rect x="2.8" y="0.4" width="2.3" height="2.2" fill="#356842"/>`
-            + `<line x1="0.6" y1="1.5" x2="4.9" y2="1.5" stroke="#1b3522" stroke-width="0.12"/>`,
+        rect(.08, .08, 5.34, 2.84, "#536147", `rx=".15" stroke="${C.edge}" stroke-width=".16"`)
+            + rect(.3, .3, 2.35, 2.4, "#667456") + rect(2.85, .3, 2.35, 2.4, "#5c6b4d")
+            + line(.5, 1.5, 5, 1.5, "#36442f", .15) + rect(2.3, 1.1, .9, .6, "#9f9270")
+            + line(.4, 2.6, 1.2, 2.7, "#9b8054", .12),
     ),
 };
-
 for (const [name, svg] of Object.entries(sprites)) {
     fs.writeFileSync(path.join(outDir, name), svg);
     console.log(`wrote ${name} (${(svg.length / 1024).toFixed(1)} KB)`);

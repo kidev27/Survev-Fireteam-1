@@ -4,6 +4,7 @@ import { ZombieWaveIntermissionTime } from "../../server/src/game/specOpsManager
 import { WeaponManager } from "../../server/src/game/weaponManager.ts";
 import {
     composeZombieWave,
+    ZombieEconomy,
     zombieEnemyHealth,
     ZombieMysteryBoxClaimDuration,
     ZombieMysteryBoxCooldown,
@@ -12,12 +13,12 @@ import {
     ZombieMysteryBoxRollDuration,
     ZombieMysteryBoxWeapons,
     ZombieRayGun,
-    ZombieEconomy,
     ZombieUpgradeCost,
     zombieWaveCount,
 } from "../../server/src/game/zombieMode.ts";
 import type { GunDef } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
+import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
 import { SpecOpsShopCatalog } from "../../shared/defs/maps/specOpsShop.ts";
 import {
     packAPunchArcBulletType,
@@ -34,7 +35,6 @@ import {
     ZombiePackAPunchTracer,
     ZombiePackAPunchType,
 } from "../../shared/defs/maps/zombiePackAPunch.ts";
-import { FireteamMapPool, ZombieMapPool } from "../../shared/defs/maps/specOpsDefs.ts";
 import { zombiePerkMachine, ZombiePerkMachines, ZombiePerkMachineTypes } from "../../shared/defs/maps/zombiePerks.ts";
 import {
     isZombiePowerUpType,
@@ -43,8 +43,8 @@ import {
     zombiePowerUpFlashVisible,
     zombiePowerUpHudFlashPeriod,
     ZombiePowerUpLifetime,
-    ZombieTimedPowerUpDuration,
     ZombiePowerUpTypes,
+    ZombieTimedPowerUpDuration,
 } from "../../shared/defs/maps/zombiePowerUps.ts";
 import { GameObjectDefs, MapObjectDefs } from "../../shared/defs/register.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
@@ -365,7 +365,7 @@ test("Fireteam matches spawn soldiers, not zombies", () => {
     expect(game.specOps?.zombieMode).toBe(false);
 });
 
-test("Last Call generates its furnished motel, club, courtyard and garage routes", () => {
+test("After Hours generates its furnished motel, maintenance, motor court and garage routes", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -380,8 +380,8 @@ test("Last Call generates its furnished motel, club, courtyard and garage routes
 
     const props = new Set(game.map.obstacles.map((obstacle) => obstacle.type));
     expect(props.has("bed_sm_01")).toBe(true);
-    expect(props.has("lastcall_bar_club")).toBe(true);
-    expect(props.has("lastcall_pool")).toBe(true);
+    expect(props.has("lastcall_parts_rack")).toBe(true);
+    expect(props.has("lastcall_sign_island")).toBe(true);
     expect(props.has("zombie_power_switch")).toBe(true);
     expect(props.has("zombie_pack_a_punch")).toBe(true);
     expect(props.has("zombie_garage_car")).toBe(true);
@@ -417,7 +417,7 @@ test("Last Call generates its furnished motel, club, courtyard and garage routes
     ).toBe(false);
 });
 
-test("Last Call perk machines sell their fixed perks for cash", () => {
+test("After Hours perk machines sell their fixed perks for cash", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -474,7 +474,7 @@ test("Zombie Survival automatically starts the next wave after an eight-second b
     expect(game.specOps!.phase).toBe("combat");
 });
 
-test("Last Call lobby gates charge cash and permanently open the selected route", () => {
+test("After Hours lobby gates charge cash and permanently open the selected route", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -498,7 +498,7 @@ test("Last Call lobby gates charge cash and permanently open the selected route"
     expect(game.specOps!.ensureNavGraph().hasPath(operator, courtyard)).toBe(true);
 });
 
-test("Last Call spawns zombies at fixed entries in currently reachable zones", () => {
+test("After Hours spawns zombies at fixed entries in currently reachable zones", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -518,7 +518,7 @@ test("Last Call spawns zombies at fixed entries in currently reachable zones", (
     ).toBe(true);
 });
 
-test("Last Call power opens the garage and enables Pack-a-Punch", () => {
+test("After Hours power opens the garage and enables Pack-a-Punch", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -679,7 +679,7 @@ test("Pack-a-Punch: the machine sits clear of walls with room to stand in front"
     }
 });
 
-test("Last Call relocates the Mystery Box after repeated uses", () => {
+test("After Hours relocates the Mystery Box after repeated uses", () => {
     const game = createGame(TeamMode.Solo, "specops_complex");
     const operator = game.playerBarn.addTestPlayer({ name: "Operator" });
     game.update(0.1);
@@ -828,7 +828,12 @@ test("Zombies: E starts round 1 early, but not later rounds", () => {
 
     ops.drainWaveSpawnQueuePublic();
     for (const enemy of [...ops.livingEnemies()]) {
-        enemy.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0), source: operator });
+        enemy.damage({
+            amount: 9999,
+            damageType: GameConfig.DamageType.Player,
+            dir: v2.create(1, 0),
+            source: operator,
+        });
     }
     game.step(1);
     expect(ops.phase).toBe("intermission");
@@ -848,7 +853,13 @@ test("Zombies economy: 500 to start, 10 per hit (capped), 60 per kill, +50 for m
     const [a, b] = ops.livingEnemies();
 
     const hit = (z: typeof a, amount: number, gameSourceType?: string) =>
-        z.damage({ amount, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0), source: operator, gameSourceType });
+        z.damage({
+            amount,
+            damageType: GameConfig.DamageType.Player,
+            dir: v2.create(1, 0),
+            source: operator,
+            gameSourceType,
+        });
 
     let cash = operator.specOpsCash;
     hit(a, 1);
@@ -1091,10 +1102,12 @@ test("Ray Gun bolt: 180 direct hit, splash on neighbours, no full explosion pass
         game.grid.updateObject(p);
     }
     const dir = v2.create(1, 0);
-    for (const [z, pos] of [
-        [target, v2.add(start, v2.create(6, 0))],
-        [neighbour, v2.add(start, v2.create(6 + target.rad + neighbour.rad + 0.6, 0.5))],
-    ] as const) {
+    for (
+        const [z, pos] of [
+            [target, v2.add(start, v2.create(6, 0))],
+            [neighbour, v2.add(start, v2.create(6 + target.rad + neighbour.rad + 0.6, 0.5))],
+        ] as const
+    ) {
         v2.set(z.pos, pos);
         z.layer = shooter.layer;
         z.health = 9999;
@@ -1869,8 +1882,7 @@ function downedPerksGame(withQuickRevive: boolean, mapName = "specops_complex") 
     a.health = a.maxHealth;
     a.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, "ak47_pap", 45);
     game.specOps!.grantCash(a, 1234);
-    const knock = () =>
-        a.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0) });
+    const knock = () => a.damage({ amount: 9999, damageType: GameConfig.DamageType.Player, dir: v2.create(1, 0) });
     return { game, a, b, perks, knock, baseMaxHealth };
 }
 

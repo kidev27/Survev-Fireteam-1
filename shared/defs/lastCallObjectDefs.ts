@@ -3,15 +3,18 @@ import { collider } from "../utils/collider.ts";
 import { v2, type Vec2 } from "../utils/v2.ts";
 import type { BuildingDef, MapObjectDef, ObstacleDef } from "./mapObjectsTyping.ts";
 import {
+    LastCallBaseProps,
     LastCallBenchPos,
     LastCallBoxSpots,
     LastCallBuildingType,
     LastCallDoors,
     LastCallEntries,
+    LastCallFloorPixelsPerUnit,
     LastCallPerkMachines,
     LastCallPowerSwitchPos,
     LastCallProps,
     LastCallScale,
+    lastCallScalePoint,
     lastCallShutterType,
     lastCallToLocal,
     lastCallWallLengths,
@@ -21,15 +24,11 @@ import {
     type LastCallZoneId,
     LastCallZones,
 } from "./maps/lastCallLayout.ts";
-import {
-    packAPunchArtOffset,
-    ZombiePackAPunchSprite,
-    ZombiePackAPunchType,
-} from "./maps/zombiePackAPunch.ts";
+import { packAPunchArtOffset, ZombiePackAPunchSprite, ZombiePackAPunchType } from "./maps/zombiePackAPunch.ts";
 import { type ZombiePerkMachineType, ZombiePerkMachineTypes } from "./maps/zombiePerks.ts";
 
 /**
- * Map objects for Last Call (see maps/lastCallLayout.ts).
+ * Map objects for After Hours (see maps/lastCallLayout.ts).
  * Walls carry no sprite: the whole block is painted in one floor image
  * (map-lastcall-floor.svg) so the art lines up with the collision exactly.
  * Gates, the power gate, box, bench and switch use the zombie_* types the
@@ -157,15 +156,15 @@ const ZoneSurface: Record<LastCallZoneId, string> = {
 
 /** Minimap colors per zone. */
 const ZoneMapColor: Record<LastCallZoneId, number> = {
-    lobby: 0x1f5560,
-    storage: 0x3a3f47,
-    courtyard: 0x3a3646,
-    diner: 0x6a2236,
-    alley: 0x2a2830,
-    wing: 0x4a3463,
-    club: 0x5c1f52,
-    office: 0x5a3a22,
-    garage: 0x2f3038,
+    lobby: 0x65665a,
+    storage: 0x53564e,
+    courtyard: 0x424a49,
+    diner: 0x746957,
+    alley: 0x383f3f,
+    wing: 0x625951,
+    club: 0x59605a,
+    office: 0x685b46,
+    garage: 0x505958,
 };
 
 /** Perk machine size (1 = original). Collision and use range grow with it. */
@@ -217,6 +216,9 @@ function buildingMapObjects(): BuildingDef["mapObjects"] {
         add(perkGlowType(machine.type), at(machine.pos));
         add(machine.type, at(machine.pos));
     }
+    // A gentle amber flicker lights only the sign island, below players.
+    const sign = LastCallBaseProps.find((p) => p.type === "lastcall_sign_island")!;
+    add("lastcall_motel_sign_glow", at(lastCallScalePoint(sign.pos)));
     // Zombies climb in at these (boarded windows are painted on the walls).
     for (const e of LastCallEntries) add("zombie_spawn_point", at(e.pos));
 
@@ -237,7 +239,7 @@ function complexDef(): BuildingDef {
         ori: 0,
         map: {
             display: true,
-            color: 0x1c1826,
+            color: 0x424a49,
             scale: 1,
             shapes: LastCallZones.map((z) => ({
                 collider: zoneAabb(z.id, 0.5),
@@ -257,8 +259,8 @@ function complexDef(): BuildingDef {
                 {
                     sprite: "map-lastcall-floor.img",
                     pos: v2.create(0, 0),
-                    // drawn at 16 / LastCallScale px per unit to keep the texture size down
-                    scale: LastCallScale,
+                    // Keep art at the exact plan size as raster density changes.
+                    scale: 16 / LastCallFloorPixelsPerUnit,
                     alpha: 1,
                     tint: 0xffffff,
                 },
@@ -287,16 +289,36 @@ function lastCallDefs(): Record<string, MapObjectDef> {
 
     // Invisible collision for furniture painted into the floor art.
     // (Names avoid "desk", "crate" etc.: Spec Ops strips props matching those from buildings.)
-    // Counters and desks are waist-high cover; the pool rail stops feet, not bullets.
+    // Counters are waist-high cover; the low sign island can be shot over.
     // Built-in fixtures scale with the rooms (LastCallScaledPropTypes); sizes below are base-plan sizes.
     const fixture = (w: number, h: number, height: number) =>
         lastCallSolidBlock({ extents: v2.create((w / 2) * LastCallScale, (h / 2) * LastCallScale), height });
     defs.lastcall_reception = fixture(8, 2.5, 0.5);
     defs.lastcall_counter_diner = fixture(14, 2, 0.5);
-    defs.lastcall_bar_club = fixture(3, 30, 0.5);
-    defs.lastcall_dj_booth = fixture(16, 4, 0.5);
+    defs.lastcall_parts_rack = fixture(3, 14, 1);
+    defs.lastcall_service_bench = fixture(12, 3.5, 0.5);
     defs.lastcall_office_table = fixture(12, 3.5, 0.5);
-    defs.lastcall_pool = fixture(28, 15, 0.2);
+    defs.lastcall_sign_island = fixture(14, 6, 0.5);
+    defs.lastcall_luggage = lastCallSolidBlock({ extents: v2.create(1.4, 0.9), height: 0.5 });
+    defs.lastcall_laundry = lastCallSolidBlock({ extents: v2.create(1.7, 1.7), metal: true, height: 1 });
+    defs.lastcall_motel_sign_glow = {
+        type: "decal",
+        collision: collider.createAabbExtents(v2.create(0, 0), v2.create(1, 1)),
+        height: 0,
+        lifetime: 1e10,
+        img: {
+            sprite: "map-light-01.img",
+            scale: 0.16,
+            alpha: 0.16,
+            tint: 0xffc779,
+            zIdx: 5,
+            flicker: true,
+            flickerMin: 0.65,
+            flickerMax: 1,
+            flickerRate: 0.3,
+            ignoreAdjust: true,
+        },
+    };
     defs.lastcall_planter = lastCallSolidBlock({ extents: v2.create(1.5, 1.5), height: 1 });
     defs.lastcall_pallet = lastCallSolidBlock({ extents: v2.create(2.25, 2.25) });
     defs.lastcall_ice_machine = lastCallSolidBlock({ extents: v2.create(1.5, 1.25), metal: true, height: 1 });

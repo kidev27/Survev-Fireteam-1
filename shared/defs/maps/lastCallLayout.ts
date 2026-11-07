@@ -2,8 +2,9 @@ import { v2, type Vec2 } from "../../utils/v2.ts";
 import type { ZombiePerkMachineType } from "./zombiePerks.ts";
 
 /**
- * Last Call (Zombie Survival map `specops_complex`): one walled motel +
- * nightclub block, nine zones opened with buy gates, a power switch, a moving
+ * After Hours (Zombie Survival map `specops_complex`): one walled motor
+ * court, motel and roadside garage. Nine zones opened with buy gates, a power
+ * switch, a moving
  * mystery box and an upgrade bench. The rules live in SpecOpsManager's zombie
  * systems; this file is only the layout.
  *
@@ -15,12 +16,17 @@ import type { ZombiePerkMachineType } from "./zombiePerks.ts";
  * and art can't drift apart.
  */
 
+/** Display name; internal LastCall/specops IDs remain compatible with saved games. */
+export const LastCallDisplayName = "After Hours";
+
 export const LastCallMapName = "specops_complex";
 export const LastCallBuildingType = "zombie_branching_complex_01";
 
 /** How much bigger the rooms are than the base plan (1 = original 145 × 115 block). */
 export const LastCallScale = 1.5;
 const S = LastCallScale;
+/** Floor raster density; stays below a 4096px atlas at the authored scale. */
+export const LastCallFloorPixelsPerUnit = 24 / LastCallScale;
 
 /** Size of the walled block, in game units. */
 export const LastCallWidth = 145 * S;
@@ -67,23 +73,31 @@ export interface LastCallZone {
 
 /** Base-plan zones (scaled copies are exported as LastCallZones). */
 export const LastCallBaseZones: LastCallZone[] = [
-    { id: "lobby", name: "Motel Lobby", rect: { x0: 55, y0: 90, x1: 85, y1: 115 } },
-    { id: "storage", name: "Storage", rect: { x0: 85, y0: 90, x1: 100, y1: 115 } },
-    { id: "courtyard", name: "Courtyard", rect: { x0: 40, y0: 50, x1: 100, y1: 90 } },
-    { id: "diner", name: "Neon Diner", rect: { x0: 10, y0: 90, x1: 55, y1: 115 } },
-    { id: "alley", name: "Alley", rect: { x0: 100, y0: 50, x1: 115, y1: 115 } },
-    { id: "wing", name: "Motel Wing", rect: { x0: 0, y0: 30, x1: 40, y1: 90 } },
-    { id: "club", name: "Club Paradiso", rect: { x0: 40, y0: 0, x1: 110, y1: 50 } },
+    { id: "lobby", name: "Reception", rect: { x0: 55, y0: 90, x1: 85, y1: 115 } },
+    { id: "storage", name: "Stockroom", rect: { x0: 85, y0: 90, x1: 100, y1: 115 } },
+    { id: "courtyard", name: "Motor Court", rect: { x0: 40, y0: 50, x1: 100, y1: 90 } },
+    { id: "diner", name: "Night Owl Diner", rect: { x0: 10, y0: 90, x1: 55, y1: 115 } },
+    { id: "alley", name: "Service Alley", rect: { x0: 100, y0: 50, x1: 115, y1: 115 } },
+    { id: "wing", name: "Guest Rooms", rect: { x0: 0, y0: 30, x1: 40, y1: 90 } },
+    { id: "club", name: "Maintenance Hall", rect: { x0: 40, y0: 0, x1: 110, y1: 50 } },
     { id: "office", name: "Manager's Office", rect: { x0: 110, y0: 0, x1: 145, y1: 25 } },
-    { id: "garage", name: "Parking Garage", rect: { x0: 115, y0: 25, x1: 145, y1: 115 } },
+    { id: "garage", name: "Roadside Garage", rect: { x0: 115, y0: 25, x1: 145, y1: 115 } },
 ];
 
 /** Motel rooms 101–104 inside the wing (walls only, same zone). */
 const BaseMotelRooms: LastCallRect[] = [
-    { x0: 0, y0: 30, x1: 22.5, y1: 45 },
-    { x0: 0, y0: 45, x1: 22.5, y1: 60 },
-    { x0: 0, y0: 60, x1: 22.5, y1: 75 },
-    { x0: 0, y0: 75, x1: 22.5, y1: 90 },
+    { x0: 0, y0: 30, x1: 25, y1: 45 },
+    { x0: 0, y0: 45, x1: 20, y1: 60 },
+    { x0: 0, y0: 60, x1: 25, y1: 75 },
+    { x0: 0, y0: 75, x1: 20, y1: 90 },
+];
+
+/** Parts store and laundry create smaller spaces around an L-shaped service hall.
+ * They are open subrooms of the existing maintenance zone, never extra buy gates.
+ */
+const BaseServiceRooms: LastCallRect[] = [
+    { x0: 40, y0: 0, x1: 62, y1: 19 },
+    { x0: 86, y0: 0, x1: 110, y1: 22 },
 ];
 
 /** A gap in a wall line. `axis: "h"` = horizontal wall at y = `at`, spanning x a0..a1. */
@@ -134,11 +148,14 @@ const BaseDoors: LastCallDoor[] = [
     { id: "alley_garage", kind: "shutter", cost: 1250, zones: ["alley", "garage"], opening: vOpen(115, 88, SW) },
     // Freight gate: opens when the power is switched on.
     { id: "office_garage", kind: "power", cost: 0, zones: ["office", "garage"], opening: hOpen(25, 130, SW) },
+    // Parts store and laundry are permanently open within the maintenance zone.
+    { id: "parts_room", kind: "room", cost: 0, zones: ["club", "club"], opening: hOpen(19, 53, SW) },
+    { id: "laundry_room", kind: "room", cost: 0, zones: ["club", "club"], opening: hOpen(22, 98, SW) },
     // Motel room doorways (open, same zone: no doors to snag zombies on)
-    { id: "room_101", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(22.5, 37.5, RW) },
-    { id: "room_102", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(22.5, 52.5, RW) },
-    { id: "room_103", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(22.5, 67.5, RW) },
-    { id: "room_104", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(22.5, 82.5, RW) },
+    { id: "room_101", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(25, 37.5, RW) },
+    { id: "room_102", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(20, 52.5, RW) },
+    { id: "room_103", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(25, 67.5, RW) },
+    { id: "room_104", kind: "room", cost: 0, zones: ["wing", "wing"], opening: vOpen(20, 82.5, RW) },
 ];
 
 /**
@@ -236,8 +253,10 @@ export const LastCallBaseProps: LastCallProp[] = [
     { type: "lastcall_pallet", pos: v2.create(88.5, 94) },
     { type: "lastcall_pallet", pos: v2.create(96.5, 94) },
     { type: "barrel_01", pos: v2.create(97.5, 111.5) },
-    // Courtyard: drained pool (low rail, bullets pass), palms in planters, loungers
-    { type: "lastcall_pool", pos: v2.create(70, 68.5) },
+    // Motor court: a low sign island anchors two drive-around routes.
+    { type: "lastcall_sign_island", pos: v2.create(70, 69) },
+    { type: "zombie_garage_car", pos: v2.create(51, 63), ori: 1 },
+    { type: "zombie_garage_car", pos: v2.create(91, 75), ori: 1 },
     { type: "lastcall_planter", pos: v2.create(46, 84) },
     { type: "lastcall_planter", pos: v2.create(94, 55) },
     { type: "lastcall_planter", pos: v2.create(46, 62) },
@@ -256,13 +275,18 @@ export const LastCallBaseProps: LastCallProp[] = [
     { type: "bed_sm_01", pos: v2.create(12, 84), ori: 0 },
     { type: "lastcall_ice_machine", pos: v2.create(37, 33.5) },
     { type: "lastcall_ice_machine", pos: v2.create(37, 86.5) },
-    // Club: bar, DJ booth, VIP couches, tables
-    { type: "lastcall_bar_club", pos: v2.create(44.5, 24) },
-    { type: "lastcall_dj_booth", pos: v2.create(74, 5) },
-    { type: "couch_01", pos: v2.create(102, 32), ori: 0 },
-    { type: "couch_01", pos: v2.create(106.5, 39), ori: 1 },
-    { type: "table_02", pos: v2.create(58, 42) },
-    { type: "table_02", pos: v2.create(90, 42) },
+    // Maintenance: parts store, workbench and laundry, leaving the center clear.
+    { type: "lastcall_parts_rack", pos: v2.create(44, 31) },
+    { type: "lastcall_service_bench", pos: v2.create(73, 7) },
+    { type: "zombie_garage_car", pos: v2.create(73, 29) },
+    { type: "zombie_garage_car", pos: v2.create(97, 38), ori: 1 },
+    { type: "lastcall_pallet", pos: v2.create(45, 13) },
+    { type: "lastcall_pallet", pos: v2.create(58, 6) },
+    { type: "lastcall_laundry", pos: v2.create(90, 7) },
+    { type: "lastcall_laundry", pos: v2.create(90, 13) },
+    { type: "lastcall_luggage", pos: v2.create(18, 33) },
+    { type: "lastcall_luggage", pos: v2.create(16, 78) },
+    { type: "lastcall_luggage", pos: v2.create(59, 99) },
     // Office: the manager's table
     { type: "lastcall_office_table", pos: v2.create(128, 8.5) },
     { type: "chair_01", pos: v2.create(128, 12.5), ori: 2 },
@@ -285,14 +309,14 @@ export const LastCallBaseProps: LastCallProp[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * Built-in fixtures that are part of the room (pool, bar, DJ booth, counters,
+ * Built-in fixtures that are part of the room (sign island, shelving, counters,
  * desks): they scale with the room, size included. Everything else is
  * furniture and keeps its real size.
  */
 export const LastCallScaledPropTypes = new Set([
-    "lastcall_pool",
-    "lastcall_bar_club",
-    "lastcall_dj_booth",
+    "lastcall_sign_island",
+    "lastcall_parts_rack",
+    "lastcall_service_bench",
     "lastcall_counter_diner",
     "lastcall_reception",
     "lastcall_office_table",
@@ -317,7 +341,7 @@ export function lastCallScalePoint(p: Vec2): Vec2 {
 export function lastCallPlace(p: Vec2): Vec2 {
     const contains = (r: LastCallRect) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
     const area = (r: LastCallRect) => (r.x1 - r.x0) * (r.y1 - r.y0);
-    const rect = [...BaseMotelRooms, ...LastCallBaseZones.map((z) => z.rect)]
+    const rect = [...BaseMotelRooms, ...BaseServiceRooms, ...LastCallBaseZones.map((z) => z.rect)]
         .filter(contains)
         .sort((a, b) => area(a) - area(b))[0];
     if (!rect) return lastCallScalePoint(p);
@@ -337,6 +361,8 @@ function scaleOpening(o: LastCallOpening): LastCallOpening {
 
 export const LastCallZones: LastCallZone[] = LastCallBaseZones.map((z) => ({ ...z, rect: scaleRect(z.rect) }));
 export const LastCallMotelRooms: LastCallRect[] = BaseMotelRooms.map(scaleRect);
+/** Every internal room; consumed by both wall collision and the art generator. */
+export const LastCallInteriorRooms: LastCallRect[] = [...BaseMotelRooms, ...BaseServiceRooms].map(scaleRect);
 export const LastCallDoors: LastCallDoor[] = BaseDoors.map((d) => ({ ...d, opening: scaleOpening(d.opening) }));
 export const LastCallEntries: LastCallEntry[] = BaseEntries.map((e) => ({
     ...e,
@@ -411,7 +437,7 @@ let wallCache: LastCallWall[] | undefined;
 export function lastCallWalls(): LastCallWall[] {
     if (wallCache) return wallCache;
     const lines = new Map<string, Array<[number, number]>>();
-    const rects = [...LastCallZones.map((z) => z.rect), ...LastCallMotelRooms];
+    const rects = [...LastCallZones.map((z) => z.rect), ...LastCallInteriorRooms];
     for (const r of rects) {
         addInterval(lines, `h:${r.y0}`, r.x0, r.x1);
         addInterval(lines, `h:${r.y1}`, r.x0, r.x1);
